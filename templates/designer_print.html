@@ -1,0 +1,249 @@
+{% extends "base.html" %}
+
+{% block title %}打印预览 - {{ layout_name }}{% endblock %}
+
+{% block head %}
+  <style>
+    @media print { 
+      .no-print { display: none !important; }
+      body { margin: 0; padding: 0; }
+      #pdf-container { 
+        width: 100vw !important; 
+        height: 100vh !important; 
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+      #pdf-container embed,
+      #pdf-container iframe {
+        width: 100% !important;
+        height: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+    }
+    .wm {
+      background-image:
+        repeating-linear-gradient(
+          -30deg,
+          rgba(148,163,184,.08) 0px,
+          rgba(148,163,184,.08) 18px,
+          rgba(255,255,255,0) 18px,
+          rgba(255,255,255,0) 56px
+        );
+    }
+    @media (prefers-color-scheme: dark) {
+      .wm {
+        background-image:
+          repeating-linear-gradient(
+            -30deg,
+            rgba(148,163,184,.14) 0px,
+            rgba(148,163,184,.14) 18px,
+            rgba(2,6,23,0) 18px,
+            rgba(2,6,23,0) 56px
+          );
+      }
+    }
+  </style>
+{% endblock %}
+
+{% block body %}
+  <div class="h-screen flex flex-col">
+    <div class="no-print px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
+      <button id="back-btn" class="glass rounded-2xl px-4 py-2 text-sm font-black">← 返回</button>
+      <div class="text-center">
+        <div class="text-sm font-black">打印预览</div>
+        <div id="meta" class="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">{{ layout_name }}</div>
+      </div>
+      <div class="glass rounded-2xl px-3 py-2 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+        设计器布局
+      </div>
+    </div>
+
+    <div class="flex-1 overflow-auto p-4 sm:p-6">
+      <div class="max-w-5xl mx-auto">
+        <div class="glass rounded-3xl overflow-hidden">
+          <div class="px-5 py-3 border-b border-slate-200/20 dark:border-slate-700/30 flex items-center justify-between no-print">
+            <div class="text-xs font-black text-slate-600 dark:text-slate-300">PDF 预览</div>
+            <div class="text-[11px] text-slate-500 dark:text-slate-400">
+              <span id="page-label">正在生成...</span>
+            </div>
+          </div>
+          <div class="wm p-4 sm:p-6">
+            <div id="pdf-container" class="space-y-6">
+              <div class="text-center py-14">
+                <div class="glass rounded-3xl px-6 py-10 inline-block">
+                  <div class="text-base font-black">正在生成 PDF...</div>
+                  <div class="text-[11px] text-slate-500 dark:text-slate-400 mt-2">使用设计器布局渲染中</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Floating print button -->
+    <button id="print-fab"
+            class="no-print fixed right-4 bottom-5 sm:right-6 sm:bottom-6 glass rounded-3xl px-5 py-4 font-black shadow-glass active:scale-[0.99] transition">
+      立即打印
+    </button>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+  <script>
+    window.DESIGNER_PRINT_BOOT = {
+      processCode: "{{ process_code }}",
+      instanceId: "{{ instance_id }}",
+      layoutName: "{{ layout_name }}",
+      layout: {{ layout_json | safe }},
+    };
+  </script>
+  <script>
+    (function() {
+      const boot = window.DESIGNER_PRINT_BOOT || {};
+      const container = document.getElementById('pdf-container');
+      const pageLabel = document.getElementById('page-label');
+      const printFab = document.getElementById('print-fab');
+      const backBtn = document.getElementById('back-btn');
+      
+      backBtn?.addEventListener('click', () => {
+        window.history.back();
+      });
+      
+      printFab?.addEventListener('click', () => {
+        // 尝试使用钉钉原生打印
+        if (window.dd && dd.env && dd.env.platform !== "notInDingTalk") {
+          // 钉钉打印需要真实的 URL，不能使用 blob: URL
+          // 方案：直接使用 /designer/api/preview 的 URL
+          const layout = boot.layout || {};
+          const attachmentBgConfig = layout.attachment_background_config || {};
+          let useTemplate = layout.use_template !== false;
+          if (attachmentBgConfig.enabled && layout.cover_source_mode === 'attachment') {
+            useTemplate = true;
+          }
+          
+          // 构建 PDF URL（带查询参数）
+          const params = new URLSearchParams({
+            process_code: boot.processCode,
+            instance_id: boot.instanceId,
+            base_pdf: layout.base_pdf || '',
+            use_template: useTemplate ? '1' : '0',
+            orientation: layout.orientation || 'l',
+            cover_source_mode: layout.cover_source_mode || 'base',
+            cover_mode: layout.cover_mode || 'strict',
+            cover_offset_x: layout.cover_offset_x || 0,
+            cover_offset_y: layout.cover_offset_y || 0,
+            // 注意：attachment_background_config 需要 JSON 编码
+            attachment_background_config: JSON.stringify(attachmentBgConfig),
+            items: JSON.stringify(layout.items || []),
+          });
+          
+          const pdfUrl = window.location.origin + '/designer/api/preview?' + params.toString();
+          
+          dd.ready(function () {
+            try {
+              dd.biz.util.print({
+                url: pdfUrl,
+                onSuccess: function () {
+                  console.log('[DingTalk] 正在唤起钉钉打印...');
+                },
+                onFail: function (err) {
+                  console.error('[DingTalk] 钉钉打印失败:', err);
+                  // 降级：直接打开 PDF 让用户手动打印
+                  window.open(pdfUrl, '_blank');
+                },
+              });
+            } catch (e) {
+              console.error('[DingTalk] 钉钉打印异常:', e);
+              // 降级：直接打开 PDF 让用户手动打印
+              window.open(pdfUrl, '_blank');
+            }
+          });
+        } else {
+          // 浏览器环境：直接打开 PDF 让用户使用浏览器的打印功能
+          const pdfUrl = window.currentPdfUrl;
+          if (pdfUrl) {
+            // 在新窗口打开 PDF，用户可以使用浏览器的打印功能
+            window.open(pdfUrl, '_blank');
+          } else {
+            // 降级：使用 window.print()
+            window.print();
+          }
+        }
+      });
+      
+      // Generate PDF via designer preview API
+      async function loadPDF() {
+        try {
+          const layout = boot.layout || {};
+          
+          // 如果启用了附件底图，强制 use_template = true
+          let useTemplate = layout.use_template !== false;
+          const attachmentBgConfig = layout.attachment_background_config || {};
+          if (attachmentBgConfig.enabled && layout.cover_source_mode === 'attachment') {
+            useTemplate = true;
+            console.log('[DEBUG] 钉钉打印：启用附件底图，强制 use_template = true');
+          }
+          
+          const res = await fetch(`/designer/api/preview`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              process_code: boot.processCode,
+              instance_id: boot.instanceId,
+              base_pdf: layout.base_pdf || '',
+              use_template: useTemplate,
+              orientation: layout.orientation || 'l',
+              cover_source_mode: layout.cover_source_mode || 'base',
+              cover_mode: layout.cover_mode || 'strict',
+              cover_offset_x: layout.cover_offset_x || 0,
+              cover_offset_y: layout.cover_offset_y || 0,
+              attachment_background_config: attachmentBgConfig,  // ← 新增
+              items: layout.items || [],
+            }),
+          });
+          
+          if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.msg || `HTTP ${res.status}`);
+          }
+          
+          const blob = await res.blob();
+          const url = URL.createObjectURL(blob);
+          
+          // 保存 PDF URL 供打印使用
+          window.currentPdfUrl = url;
+          
+          // 保存 orientation 用于打印方向
+          window.pdfOrientation = layout.orientation || 'l';
+          
+          // Render PDF using iframe (更好的打印支持)
+          if (container) {
+            container.innerHTML = `
+              <iframe src="${url}" width="100%" height="800px" class="rounded-2xl" style="border: none;"></iframe>
+            `;
+          }
+          
+          if (pageLabel) {
+            pageLabel.textContent = 'PDF 已生成';
+          }
+        } catch (err) {
+          console.error('PDF generation failed:', err);
+          if (container) {
+            container.innerHTML = `
+              <div class="text-center py-14">
+                <div class="glass rounded-3xl px-6 py-10 inline-block">
+                  <div class="text-base font-black text-red-600 dark:text-red-400">PDF 生成失败</div>
+                  <div class="text-[11px] text-slate-500 dark:text-slate-400 mt-2">${err.message || '未知错误'}</div>
+                </div>
+              </div>
+            `;
+          }
+        }
+      }
+      
+      loadPDF();
+    })();
+  </script>
+{% endblock %}

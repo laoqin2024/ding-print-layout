@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="h-full">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>{% block title %}审批套印中心{% endblock %}</title>
+
+  <!-- DingTalk JSAPI (safe to include globally) -->
+  <script src="https://g.alicdn.com/dingding/dingtalk-jsapi/2.10.3/dingtalk.open.js"></script>
+  <link rel="stylesheet" href="{{ url_for('static', filename='dist/app.css') }}?v={{ asset_v }}" />
+  <style>
+    /* Fallback for glass buttons without explicit text-* classes */
+    a.glass:not([class*="text-"]),
+    button.glass:not([class*="text-"]),
+    label.glass:not([class*="text-"]) {
+      color: #0f172a;
+    }
+    @media (prefers-color-scheme: dark) {
+      a.glass:not([class*="text-"]),
+      button.glass:not([class*="text-"]),
+      label.glass:not([class*="text-"]) {
+        color: #f8fafc;
+        text-shadow: 0 1px 1px rgba(0, 0, 0, 0.35);
+      }
+    }
+  </style>
+
+  {% block head %}{% endblock %}
+</head>
+<body class="h-full text-slate-900 dark:text-slate-100">
+  <div class="min-h-full">
+    {% block body %}{% endblock %}
+  </div>
+
+  <script src="{{ url_for('static', filename='dist-legacy/core.js') }}?v={{ asset_v }}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>
+

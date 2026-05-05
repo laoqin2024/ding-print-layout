@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}打印排版设计器{% endblock %}
+
+{% block body %}
+  <div class="p-4 sm:p-8 lg:p-10">
+    <div class="max-w-6xl mx-auto">
+      <header class="flex items-center justify-between gap-3 mb-6">
+        <div>
+          <h1 class="text-2xl sm:text-3xl font-black tracking-tight">打印排版设计器</h1>
+          <p class="text-slate-500 dark:text-slate-400 text-sm mt-1">独立模块：读取表单全控件并拖拽排版</p>
+        </div>
+        <div class="flex gap-2">
+          <a href="/admin" class="glass rounded-2xl px-4 py-2 text-sm font-black">返回管理后台</a>
+          <a href="/designer/edit" class="inline-flex items-center justify-center rounded-2xl px-4 py-2 text-sm font-black bg-indigo-600 text-white hover:bg-indigo-700 border border-indigo-800/25 shadow-md transition-colors">+ 新建设计</a>
+        </div>
+      </header>
+
+      <div class="glass rounded-3xl overflow-hidden">
+        <div class="px-6 py-4 border-b border-slate-200/20 dark:border-slate-700/30 text-xs font-black text-slate-500">
+          布局方案列表
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full min-w-[760px] text-left">
+            <thead class="text-[10px] uppercase font-black text-slate-500 border-b border-slate-200/20 dark:border-slate-700/30">
+              <tr>
+                <th class="px-6 py-4">流程 Code</th>
+                <th class="px-6 py-4">名称</th>
+                <th class="px-6 py-4">底稿</th>
+                <th class="px-6 py-4 text-right">操作</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-200/10 dark:divide-slate-700/20">
+              {% if layouts %}
+                {% for code, row in layouts.items() %}
+                  <tr>
+                    <td class="px-6 py-4 text-xs font-mono text-blue-600 dark:text-blue-300">{{ code }}</td>
+                    <td class="px-6 py-4 text-sm font-black">{{ row.name }}</td>
+                    <td class="px-6 py-4 text-xs">{{ row.base_pdf }}</td>
+                    <td class="px-6 py-4 text-right">
+                      <a href="/designer/edit?code={{ code }}"
+                         class="inline-flex items-center px-3 py-2 rounded-xl font-black text-xs glass text-slate-800 dark:text-slate-100">编辑</a>
+                      <form action="/designer/delete" method="post" class="inline-block"
+                            onsubmit="return confirm('确认删除该布局?');">
+                        <input type="hidden" name="process_code" value="{{ code }}" />
+                        <button type="submit"
+                                class="inline-flex items-center px-3 py-2 rounded-xl font-black text-xs bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/25">
+                          删除
+                        </button>
+                      </form>
+                    </td>
+                  </tr>
+                {% endfor %}
+              {% else %}
+                <tr><td colspan="4" class="px-6 py-14 text-center text-slate-500">暂无布局方案</td></tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}

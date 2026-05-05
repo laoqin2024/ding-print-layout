@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>身份验证中</title>
+    <script src="https://g.alicdn.com/dingding/dingtalk-jsapi/2.10.3/dingtalk.open.js"></script>
+</head>
+<body style="background:#f8fafc; display:flex; flex-direction:column; justify-content:center; align-items:center; height:100vh; font-family:sans-serif;">
+    <div style="color:#64748b; font-size:14px;">安全连接中...</div>
+    <script>
+        dd.ready(function() {
+            dd.runtime.permission.requestAuthCode({
+                corpId: "{{ corp_id }}",
+                onSuccess: function(result) {
+                    // 拿到 code 后，返回首页
+                    window.location.replace("/?code=" + result.code);
+                },
+                onFail: function(err) {
+                    alert('请在钉钉移动端打开此页面');
+                }
+            });
+        });
+    </script>
+</body>
+</html>

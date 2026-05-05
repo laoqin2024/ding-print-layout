@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+
+{% block title %}确认预览{% endblock %}
+
+{% block head %}
+  <style>
+    @media print { .no-print { display: none !important; } }
+    /* Watermark background */
+    .wm {
+      background-image:
+        repeating-linear-gradient(
+          -30deg,
+          rgba(148,163,184,.08) 0px,
+          rgba(148,163,184,.08) 18px,
+          rgba(255,255,255,0) 18px,
+          rgba(255,255,255,0) 56px
+        );
+    }
+    @media (prefers-color-scheme: dark) {
+      .wm {
+        background-image:
+          repeating-linear-gradient(
+            -30deg,
+            rgba(148,163,184,.14) 0px,
+            rgba(148,163,184,.14) 18px,
+            rgba(2,6,23,0) 18px,
+            rgba(2,6,23,0) 56px
+          );
+      }
+    }
+  </style>
+{% endblock %}
+
+{% block body %}
+  <div class="h-screen flex flex-col">
+    <div class="no-print px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
+      <button id="back-btn" class="glass rounded-2xl px-4 py-2 text-sm font-black">← 返回</button>
+      <div class="text-center">
+        <div class="text-sm font-black">确认预览</div>
+        <div id="meta" class="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">正在加载 PDF…</div>
+      </div>
+      <div class="glass rounded-2xl px-3 py-2 text-[11px] font-semibold text-slate-600 dark:text-slate-300">
+        渲染中
+      </div>
+    </div>
+
+    <div class="flex-1 overflow-auto p-4 sm:p-6">
+      <div class="max-w-5xl mx-auto">
+        <div id="check-panel" class="glass rounded-3xl p-4 mb-4 no-print hidden">
+          <div class="flex items-center justify-between gap-2">
+            <div>
+              <div class="text-sm font-black">打印前检查</div>
+              <div id="check-subtitle" class="text-[11px] text-slate-500 dark:text-slate-400 mt-1">正在分析套印结果…</div>
+            </div>
+            <div id="check-state" class="text-[11px] font-black px-3 py-1.5 rounded-full"></div>
+          </div>
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3 text-center">
+            <div class="rounded-2xl bg-white/20 dark:bg-white/5 py-2">
+              <div id="chk-sign-total" class="text-sm font-black">0</div>
+              <div class="text-[10px] text-slate-500 dark:text-slate-400">签名总数</div>
+            </div>
+            <div class="rounded-2xl bg-blue-500/10 py-2">
+              <div id="chk-zone-total" class="text-sm font-black text-blue-700 dark:text-blue-300">0</div>
+              <div class="text-[10px] text-slate-500 dark:text-slate-400">区域总数</div>
+            </div>
+            <div class="rounded-2xl bg-amber-500/10 py-2">
+              <div id="chk-match-count" class="text-sm font-black text-amber-700 dark:text-amber-300">0</div>
+              <div class="text-[10px] text-slate-500 dark:text-slate-400">匹配次数</div>
+            </div>
+            <div class="rounded-2xl bg-emerald-500/10 py-2">
+              <div id="chk-inserted-count" class="text-sm font-black text-emerald-700 dark:text-emerald-300">0</div>
+              <div class="text-[10px] text-slate-500 dark:text-slate-400">插入成功</div>
+            </div>
+          </div>
+          <div id="check-warn" class="hidden mt-3 rounded-2xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-700 dark:text-amber-300"></div>
+        </div>
+
+        <div class="glass rounded-3xl overflow-hidden">
+          <div class="px-5 py-3 border-b border-slate-200/20 dark:border-slate-700/30 flex items-center justify-between no-print">
+            <div class="text-xs font-black text-slate-600 dark:text-slate-300">PDF 预览</div>
+            <div class="text-[11px] text-slate-500 dark:text-slate-400">
+              <span id="page-label">- / -</span>
+            </div>
+          </div>
+          <div class="wm p-4 sm:p-6">
+            <div id="pdf-pages" class="space-y-6"></div>
+            <div id="pdf-error" class="hidden text-center py-14">
+              <div class="glass rounded-3xl px-6 py-10 inline-block">
+                <div class="text-base font-black">预览加载失败</div>
+                <div class="text-[11px] text-slate-500 dark:text-slate-400 mt-2">你仍可直接打印或返回重试</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Floating print button -->
+    <button id="print-fab"
+            class="no-print fixed right-4 bottom-5 sm:right-6 sm:bottom-6 glass rounded-3xl px-5 py-4 font-black shadow-glass active:scale-[0.99] transition">
+      立即打印
+    </button>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+  {% if jsapi_config %}
+  <script>
+    // 配置钉钉 JSAPI（用于原生打印功能）
+    if (window.dd && dd.config) {
+      dd.config({
+        corpId: "{{ jsapi_config.corpId }}",
+        timeStamp: "{{ jsapi_config.timeStamp }}",
+        nonceStr: "{{ jsapi_config.nonceStr }}",
+        signature: "{{ jsapi_config.signature }}",
+        jsApiList: {{ jsapi_config.jsApiList | tojson }}
+      });
+      
+      dd.error(function(err) {
+        console.error('[DingTalk] dd.config error:', err);
+      });
+      
+      dd.ready(function() {
+        console.log('[DingTalk] dd.config success - JSAPI ready');
+      });
+    } else {
+      console.warn('[DingTalk] dd object not found, skipping dd.config');
+    }
+  </script>
+  {% endif %}
+  
+  <script>
+    window.PRINT_BOOT = {
+      pdfUrl: "{{ pdf_url }}",
+      pdfName: "{{ pdf_name or '' }}",
+      pdfBytes: {{ (pdf_bytes or 0) | int }},
+      pdfV: "{{ pdf_v or '' }}",
+      instanceId: "{{ instance_id }}",
+      processName: "{{ process_name }}",
+      checkReport: {{ (check_report or {}) | tojson }},
+    };
+  </script>
+  <script src="{{ url_for('static', filename='dist-legacy/print.js') }}?v={{ asset_v }}"></script>
+{% endblock %}

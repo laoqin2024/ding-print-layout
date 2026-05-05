@@ -1,0 +1,628 @@
+{% extends "base.html" %}
+
+{% block title %}设计器编辑{% endblock %}
+
+{% block head %}
+  <style>
+    .designer-stage { position: relative; width: 842px; height: 595px; transform-origin: 0 0; }
+    .designer-canvas { position: relative; width: 842px; height: 595px; background: #fff; }
+    .designer-bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; pointer-events: none; opacity: .95; }
+    .designer-grid {
+      position: absolute; inset: 0; pointer-events: none; opacity: .22;
+      background-image:
+        linear-gradient(to right, rgba(15,23,42,.18) 1px, rgba(0,0,0,0) 1px),
+        linear-gradient(to bottom, rgba(15,23,42,.18) 1px, rgba(0,0,0,0) 1px);
+      background-size: 10px 10px;
+    }
+    .designer-item {
+      position: absolute; border: 2px solid #4f46e5; background: rgba(79,70,229,.08);
+      color: #312e81; font-size: 10px; font-weight: 700; padding: 2px 4px; cursor: move; user-select: none;
+      min-width: 36px; min-height: 18px; overflow: hidden;
+      box-sizing: border-box; max-width: 100%; word-wrap: break-word;
+    }
+    .designer-item.active { border-color: #db2777; background: rgba(219,39,119,.10); color: #831843; }
+    .designer-item.multi { border-color: #06b6d4; background: rgba(6,182,212,.10); color: #083344; }
+    .designer-item.rect { border-style: dashed; background: rgba(2,132,199,.06); border-color: rgba(2,132,199,.55); color: #075985; }
+    .designer-item.label { background: rgba(16,185,129,.10); border-color: rgba(16,185,129,.55); color: #064e3b; }
+    .designer-item.line { background: transparent; border: none; padding: 0; --line-thickness: 2px; --line-color: rgba(2,6,23,.65); --line-style: solid; }
+    .designer-item.line::before { content: ""; position: absolute; }
+    .designer-item.line[data-line-orient="vertical"]::before {
+      top: 0; bottom: 0; left: 50%; width: 0; transform: translateX(-50%);
+      border-left: var(--line-thickness) var(--line-style) var(--line-color);
+    }
+    .designer-item.line:not([data-line-orient="vertical"])::before {
+      left: 0; right: 0; top: 50%; height: 0; transform: translateY(-50%);
+      border-top: var(--line-thickness) var(--line-style) var(--line-color);
+    }
+    .designer-item.qrcode {
+      background: #fff;
+      border: 2px solid rgba(2, 6, 23, .9);
+      color: transparent;
+    }
+    .designer-item.qrcode::before {
+      content: "";
+      position: absolute;
+      inset: 8px;
+      background:
+        linear-gradient(90deg, rgba(2,6,23,.25) 50%, transparent 50%) 0 0/8px 8px,
+        linear-gradient(rgba(2,6,23,.25) 50%, transparent 50%) 0 0/8px 8px;
+    }
+    .designer-resize-handle {
+      position: absolute; width: 10px; height: 10px; border-radius: 999px;
+      background: #4f46e5; border: 1px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.3); z-index: 3;
+    }
+    .designer-resize-handle.se { right: -6px; bottom: -6px; cursor: nwse-resize; }
+    .designer-resize-handle.s { left: 50%; bottom: -6px; transform: translateX(-50%); cursor: ns-resize; }
+    .designer-guide { position: absolute; background: rgba(16,185,129,.9); pointer-events: none; z-index: 50; }
+    .designer-guide.h { height: 1px; left: 0; right: 0; }
+    .designer-guide.v { width: 1px; top: 0; bottom: 0; }
+    .designer-marquee {
+      position: absolute; border: 1px dashed rgba(219,39,119,.9);
+      background: rgba(219,39,119,.08); pointer-events: none; z-index: 60;
+    }
+    .designer-margin-guide {
+      position: absolute;
+      border: 1px dashed rgba(245, 158, 11, .9);
+      background: rgba(245, 158, 11, .05);
+      pointer-events: none;
+      z-index: 40;
+    }
+    .designer-margin-guide::after {
+      content: "打印安全边距";
+      position: absolute;
+      top: -18px;
+      right: 0;
+      font-size: 10px;
+      font-weight: 800;
+      color: rgba(180, 83, 9, .95);
+      background: rgba(255, 255, 255, .75);
+      padding: 0 4px;
+      border-radius: 6px;
+    }
+
+    .palette-btn {
+      display: flex; align-items: center; justify-content: space-between;
+      border-radius: 14px; padding: 10px 12px;
+      background: rgba(255,255,255,.18);
+      border: 1px solid rgba(148,163,184,.18);
+      cursor: grab; user-select: none;
+    }
+    .palette-btn:active { cursor: grabbing; }
+    .palette-pill { font-size: 10px; font-weight: 800; padding: 2px 8px; border-radius: 999px; }
+    .pill-shape { background: rgba(2,132,199,.15); color: #075985; border: 1px solid rgba(2,132,199,.25); }
+    .pill-text { background: rgba(79,70,229,.15); color: #312e81; border: 1px solid rgba(79,70,229,.25); }
+    .pill-sign { background: rgba(16,185,129,.15); color: #064e3b; border: 1px solid rgba(16,185,129,.25); }
+
+    .panel-title { font-size: 11px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; color: rgba(100,116,139,.9); }
+    .panel-sub { font-size: 10px; color: rgba(100,116,139,.9); }
+  </style>
+{% endblock %}
+
+{% block body %}
+  <div class="p-2 sm:p-4">
+    <div class="max-w-[1800px] mx-auto">
+      <header class="flex items-center justify-between gap-3 mb-4">
+        <div>
+          <h1 class="text-2xl font-black">设计器编辑</h1>
+          <p class="text-xs text-slate-500 mt-1">拖拽字段到画布，独立保存排版方案</p>
+        </div>
+        <div class="flex gap-2">
+          <a href="/designer" class="glass rounded-xl px-3 py-2 text-xs font-black">返回列表</a>
+          <button id="preview-btn" class="rounded-xl px-4 py-2 text-xs font-black bg-slate-900/90 text-white">预览 PDF</button>
+          <button id="save-btn" class="rounded-xl px-4 py-2 text-xs font-black bg-indigo-600 text-white">保存布局</button>
+        </div>
+      </header>
+
+      <div class="grid grid-cols-1 xl:grid-cols-[320px_1fr_340px] gap-4">
+        <!-- Left: palette + fields -->
+        <section class="glass rounded-2xl p-3 sm:p-4 xl:sticky xl:top-3 xl:self-start xl:max-h-[calc(100vh-24px)] xl:overflow-auto">
+          <div class="flex items-start justify-between gap-2">
+            <div>
+              <div class="panel-title">palette</div>
+              <div class="panel-sub mt-1">拖拽控件到画布完成排版</div>
+            </div>
+            <button id="load-schema-btn" class="glass rounded-xl px-3 py-2 text-xs font-black">读取表单控件</button>
+          </div>
+
+          <div class="mt-3 space-y-2">
+            <div class="glass rounded-xl px-3 py-2 space-y-2">
+              <div class="flex items-center justify-between gap-2 flex-wrap">
+                <div class="text-[10px] font-black text-slate-600 dark:text-slate-300">流程（两级选择）</div>
+                <button type="button" id="refresh-processes-btn" class="glass rounded-lg px-2 py-1 text-[10px] font-black">刷新流程列表</button>
+              </div>
+              <div id="process-list-meta" class="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed"></div>
+              <select id="process-group" class="w-full glass rounded-lg px-2 py-1.5 text-xs outline-none">
+                <option value="">-- 先选流程分组 --</option>
+              </select>
+              <select id="process-pick" class="w-full glass rounded-lg px-2 py-1.5 text-xs outline-none font-mono">
+                <option value="">-- 再选具体流程 --</option>
+              </select>
+              <div class="text-[10px] text-slate-500 dark:text-slate-400">也可直接手填或粘贴 process_code：</div>
+              <input id="process-code" value="{{ code }}" placeholder="PROC-..."
+                     class="w-full bg-transparent outline-none text-xs font-mono border border-slate-300/30 rounded-lg px-2 py-1.5" />
+            </div>
+            <input id="layout-name" value="{{ layout.name or '' }}" placeholder="布局名称"
+                   class="w-full glass rounded-xl px-3 py-2 text-xs outline-none" />
+            <div class="glass rounded-xl px-3 py-2">
+              <label class="inline-flex items-center gap-2 text-xs font-black">
+                <input id="use-template" type="checkbox" {% if (layout.use_template is not defined) or layout.use_template %}checked{% endif %} />
+                使用底图模板（关闭后为纯控件排版打印）
+              </label>
+            </div>
+            <select id="base-pdf" class="w-full glass rounded-xl px-3 py-2 text-xs outline-none">
+              <option value="">选择底稿 PDF</option>
+              {% for p in all_templates %}
+                <option value="{{ p }}" {% if (layout.base_pdf or '') == p %}selected{% endif %}>{{ p }}</option>
+              {% endfor %}
+            </select>
+            <div class="grid grid-cols-2 gap-2">
+              <div class="glass rounded-xl px-3 py-2">
+                <div class="text-[10px] font-black text-slate-600">纸张方向</div>
+                <select id="paper-orient" class="w-full bg-transparent outline-none text-xs mt-1">
+                  <option value="l">A4 横向</option>
+                  <option value="p">A4 纵向</option>
+                </select>
+              </div>
+              <div class="glass rounded-xl px-3 py-2">
+                <div class="text-[10px] font-black text-slate-600">预览实例</div>
+                <input id="instance-id" placeholder="可空(取最近)" class="w-full bg-transparent outline-none text-xs mt-1 font-mono" />
+                <label class="mt-2 inline-flex items-center gap-2 text-[10px] font-black text-slate-600 dark:text-slate-300 cursor-pointer select-none">
+                  <input id="lock-current-instance" type="checkbox" class="rounded border-slate-400" />
+                  锁定当前实例（读取控件时不覆盖实例 ID）
+                </label>
+              </div>
+              <div class="glass rounded-xl px-3 py-2">
+                <div class="text-[10px] font-black text-slate-600">底图来源（source_mode）</div>
+                <select id="cover-source-mode" class="w-full bg-transparent outline-none text-xs mt-1">
+                  <option value="base">base（底稿）</option>
+                  <option value="attachment">attachment（流程附件）</option>
+                </select>
+              </div>
+              <div class="glass rounded-xl px-3 py-2">
+                <div class="text-[10px] font-black text-slate-600">覆盖模式（cover_mode）</div>
+                <select id="cover-mode" class="w-full bg-transparent outline-none text-xs mt-1">
+                  <option value="strict">strict</option>
+                  <option value="fit">fit</option>
+                  <option value="fit_offset">fit+offset</option>
+                </select>
+              </div>
+              <div class="glass rounded-xl px-3 py-2">
+                <div class="text-[10px] font-black text-slate-600">偏移 X（offset_x）</div>
+                <input id="cover-offset-x" type="number" step="0.1" value="0" class="w-full bg-transparent outline-none text-xs mt-1 font-mono" />
+              </div>
+              <div class="glass rounded-xl px-3 py-2">
+                <div class="text-[10px] font-black text-slate-600">偏移 Y（offset_y）</div>
+                <input id="cover-offset-y" type="number" step="0.1" value="0" class="w-full bg-transparent outline-none text-xs mt-1 font-mono" />
+              </div>
+            </div>
+            
+            <!-- Attachment Background Config -->
+            <div class="glass rounded-xl px-3 py-2">
+              <div class="flex items-center justify-between gap-2 mb-2">
+                <div class="text-[10px] font-black text-slate-600 dark:text-slate-300">附件底图配置</div>
+                <label class="inline-flex items-center gap-1.5 text-[10px] font-black cursor-pointer">
+                  <input id="attachment-bg-enabled" type="checkbox" class="rounded border-slate-400" />
+                  启用
+                </label>
+              </div>
+              <div id="attachment-bg-fields" class="space-y-2 hidden">
+                <div>
+                  <div class="text-[10px] text-slate-500 mb-1">附件字段</div>
+                  <select id="attachment-bg-field" class="w-full bg-transparent outline-none text-xs border border-slate-300/30 rounded-lg px-2 py-1.5">
+                    <option value="">-- 选择附件字段 --</option>
+                  </select>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                  <div>
+                    <div class="text-[10px] text-slate-500 mb-1">附件索引</div>
+                    <input id="attachment-bg-index" type="number" min="0" value="0" class="w-full bg-transparent outline-none text-xs border border-slate-300/30 rounded-lg px-2 py-1.5 font-mono" />
+                  </div>
+                  <div>
+                    <div class="text-[10px] text-slate-500 mb-1">PDF页码</div>
+                    <input id="attachment-bg-page" type="number" min="0" value="0" class="w-full bg-transparent outline-none text-xs border border-slate-300/30 rounded-lg px-2 py-1.5 font-mono" />
+                  </div>
+                </div>
+                <div>
+                  <div class="text-[10px] text-slate-500 mb-1">应用模式</div>
+                  <select id="attachment-bg-apply-mode" class="w-full bg-transparent outline-none text-xs border border-slate-300/30 rounded-lg px-2 py-1.5">
+                    <option value="disabled">禁用（始终用模板底图）</option>
+                    <option value="print_only" selected>仅打印时生效（推荐）</option>
+                    <option value="preview_and_print">预览和打印都生效</option>
+                  </select>
+                </div>
+                <div class="text-[10px] text-slate-500 leading-relaxed">
+                  · 仅打印时生效：设计器预览快速，钉钉打印用真实附件<br>
+                  · 预览和打印都生效：预览也用附件（较慢但真实）
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-4">
+            <div class="panel-title">layout components</div>
+            <div class="grid grid-cols-2 gap-2 mt-2">
+              <div class="palette-btn" draggable="true" data-palette="label">
+                <div>
+                  <div class="text-xs font-black">标签</div>
+                  <div class="text-[10px] opacity-70">静态文本</div>
+                </div>
+                <span class="palette-pill pill-text">TEXT</span>
+              </div>
+              <div class="palette-btn" draggable="true" data-palette="text">
+                <div>
+                  <div class="text-xs font-black">文本框</div>
+                  <div class="text-[10px] opacity-70">可绑定字段</div>
+                </div>
+                <span class="palette-pill pill-text">FIELD</span>
+              </div>
+              <div class="palette-btn" draggable="true" data-palette="rect">
+                <div>
+                  <div class="text-xs font-black">边框</div>
+                  <div class="text-[10px] opacity-70">矩形框</div>
+                </div>
+                <span class="palette-pill pill-shape">RECT</span>
+              </div>
+              <div class="palette-btn" draggable="true" data-palette="line">
+                <div>
+                  <div class="text-xs font-black">线条</div>
+                  <div class="text-[10px] opacity-70">水平线</div>
+                </div>
+                <span class="palette-pill pill-shape">LINE</span>
+              </div>
+              <div class="palette-btn col-span-2" draggable="true" data-palette="signature">
+                <div>
+                  <div class="text-xs font-black">签名框</div>
+                  <div class="text-[10px] opacity-70">等比插图</div>
+                </div>
+                <span class="palette-pill pill-sign">SIGN</span>
+              </div>
+              <div class="palette-btn col-span-2" draggable="true" data-palette="dept">
+                <div>
+                  <div class="text-xs font-black">部门控件</div>
+                  <div class="text-[10px] opacity-70">跟随签名组件</div>
+                </div>
+                <span class="palette-pill pill-text">DEPT</span>
+              </div>
+              <div class="palette-btn col-span-2" draggable="true" data-palette="image">
+                <div>
+                  <div class="text-xs font-black">图片</div>
+                  <div class="text-[10px] opacity-70">Logo/印章</div>
+                </div>
+                <span class="palette-pill pill-shape">IMG</span>
+              </div>
+              <div class="palette-btn col-span-2" draggable="true" data-palette="status_stamp">
+                <div>
+                  <div class="text-xs font-black">状态章</div>
+                  <div class="text-[10px] opacity-70">自动按审批状态盖章</div>
+                </div>
+                <span class="palette-pill pill-sign">STAMP</span>
+              </div>
+              <div class="palette-btn col-span-2" draggable="true" data-palette="flow_result">
+                <div>
+                  <div class="text-xs font-black">流程结果</div>
+                  <div class="text-[10px] opacity-70">自动状态文字（含待处理人）</div>
+                </div>
+                <span class="palette-pill pill-text">STATE</span>
+              </div>
+              <div class="palette-btn col-span-2" draggable="true" data-palette="qrcode">
+                <div>
+                  <div class="text-xs font-black">二维码</div>
+                  <div class="text-[10px] opacity-70">自动生成二维码</div>
+                </div>
+                <span class="palette-pill pill-shape">QR</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-4">
+            <div class="flex items-center justify-between">
+              <div class="panel-title">fields</div>
+              <div class="flex items-center gap-2">
+                <span id="qr-status-badge" class="hidden text-[10px] rounded-full px-2 py-1 bg-slate-700/10 text-slate-700 dark:text-slate-200"></span>
+                <input id="field-search" placeholder="搜索字段…" class="glass rounded-xl px-3 py-2 text-xs outline-none w-32" />
+              </div>
+            </div>
+            <div class="mt-2 max-h-[460px] overflow-auto space-y-2 text-[11px]">
+              <div class="glass rounded-xl px-2 py-2">
+                <button id="toggle-system-fields" type="button" class="w-full flex items-center justify-between text-[11px] font-black">
+                  <span>系统字段</span>
+                  <span id="toggle-system-icon">▾</span>
+                </button>
+                <div id="system-field-list" class="mt-2 space-y-2"></div>
+              </div>
+              <div class="glass rounded-xl px-2 py-2">
+                <button id="toggle-form-fields" type="button" class="w-full flex items-center justify-between text-[11px] font-black">
+                  <span>表单字段</span>
+                  <span id="toggle-form-icon">▾</span>
+                </button>
+                <div id="field-list" class="mt-2 space-y-2"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-4">
+            <div class="flex items-center justify-between">
+              <div class="panel-title">node info</div>
+              <button id="save-node-names-btn" class="glass rounded-xl px-3 py-1.5 text-[10px] font-black">保存节点中文名</button>
+            </div>
+            <div id="node-list" class="mt-2 max-h-[220px] overflow-auto space-y-2 text-[11px]"></div>
+          </div>
+        </section>
+
+        <section class="glass rounded-2xl p-3 overflow-auto xl:max-h-[calc(100vh-24px)]">
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+            <div id="canvas-title" class="text-xs font-black">画布（A4 横向）</div>
+            <div class="flex flex-wrap gap-2 items-center text-[11px]">
+              <button id="undo-btn" class="glass rounded-xl px-3 py-2 font-black">撤销</button>
+              <button id="redo-btn" class="glass rounded-xl px-3 py-2 font-black">重做</button>
+              <div class="glass rounded-xl px-3 py-2 flex items-center gap-2">
+                <span class="font-black">缩放</span>
+                <button id="zoom-out" class="px-2 py-1 rounded-lg bg-white/30">-</button>
+                <span id="zoom-label" class="font-mono">100%</span>
+                <button id="zoom-in" class="px-2 py-1 rounded-lg bg-white/30">+</button>
+                <button id="zoom-reset" class="px-2 py-1 rounded-lg bg-white/30">重置</button>
+              </div>
+              <div class="glass rounded-xl px-3 py-2 flex items-center gap-2">
+                <label class="font-black">网格</label>
+                <select id="grid-size" class="bg-transparent outline-none">
+                  <option value="5">5</option>
+                  <option value="10" selected>10</option>
+                  <option value="20">20</option>
+                </select>
+                <label class="inline-flex items-center gap-2">
+                  <input id="snap-toggle" type="checkbox" checked />
+                  <span class="font-black">吸附</span>
+                </label>
+              </div>
+            </div>
+          </div>
+          <div id="canvas-scroll-wrap" class="overflow-auto bg-slate-100 rounded-xl p-2 sm:p-3 xl:max-h-[calc(100vh-170px)]">
+            <div id="designer-stage" class="designer-stage">
+              <div id="designer-canvas" class="designer-canvas rounded-lg shadow relative">
+                <img id="designer-bg" class="designer-bg hidden" alt="" />
+                <div id="designer-grid" class="designer-grid"></div>
+                <div id="margin-guide" class="designer-margin-guide hidden"></div>
+                <div id="guide-h" class="designer-guide h hidden"></div>
+                <div id="guide-v" class="designer-guide v hidden"></div>
+                <div id="marquee" class="designer-marquee hidden"></div>
+              </div>
+            </div>
+          </div>
+          <div class="text-[10px] text-slate-500 mt-2">
+            快捷键：<span class="font-mono">Ctrl/⌘+Z</span> 撤销，
+            <span class="font-mono">Ctrl/⌘+Y</span> 重做，
+            <span class="font-mono">Shift</span>/<span class="font-mono">Ctrl</span> 多选，
+            空白处拖拽框选。鼠标在画布上滚轮仅滚动画布，<span class="font-mono">Ctrl+滚轮</span> 缩放。
+          </div>
+        </section>
+
+        <!-- Right: properties -->
+        <section class="glass rounded-2xl p-3 xl:sticky xl:top-3 xl:self-start xl:max-h-[calc(100vh-24px)] xl:overflow-auto">
+          <div class="flex items-center justify-between">
+            <div class="panel-title">properties</div>
+            <div id="sel-hint" class="text-[10px] text-slate-500">未选择</div>
+          </div>
+          <div class="grid grid-cols-2 gap-2 text-xs mt-2">
+            <div class="glass rounded-xl px-2 py-2">
+              <div class="text-[10px] font-black text-slate-600">X（左上角）</div>
+              <input id="prop-x" type="number" class="w-full bg-transparent outline-none font-mono mt-1" />
+            </div>
+            <div class="glass rounded-xl px-2 py-2">
+              <div class="text-[10px] font-black text-slate-600">Y（左上角）</div>
+              <input id="prop-y" type="number" class="w-full bg-transparent outline-none font-mono mt-1" />
+            </div>
+            <div class="glass rounded-xl px-2 py-2">
+              <div class="text-[10px] font-black text-slate-600">W（宽度）</div>
+              <input id="prop-w" type="number" class="w-full bg-transparent outline-none font-mono mt-1" />
+            </div>
+            <div class="glass rounded-xl px-2 py-2">
+              <div class="text-[10px] font-black text-slate-600">H（高度）</div>
+              <input id="prop-h" type="number" class="w-full bg-transparent outline-none font-mono mt-1" />
+            </div>
+            <div class="glass rounded-xl px-2 py-2 col-span-2">
+              <div class="text-[10px] font-black text-slate-600">显示文本（label）</div>
+              <input id="prop-label" class="w-full bg-transparent outline-none mt-1" />
+            </div>
+            <div class="glass rounded-xl px-2 py-2 col-span-2">
+              <div class="text-[10px] font-black text-slate-600">字段绑定（field_id / field_name / field_type）</div>
+              <select id="prop-bind-field" class="w-full bg-transparent outline-none mt-1 text-xs">
+                <option value="">-- 不绑定字段（仅使用label） --</option>
+              </select>
+              <div class="grid grid-cols-3 gap-2 mt-2">
+                <input id="prop-field-id" placeholder="field_id" class="bg-transparent outline-none text-[11px] font-mono border border-slate-300/30 rounded-lg px-2 py-1" />
+                <input id="prop-field-name" placeholder="field_name" class="bg-transparent outline-none text-[11px] border border-slate-300/30 rounded-lg px-2 py-1" />
+                <input id="prop-field-type" placeholder="field_type" class="bg-transparent outline-none text-[11px] font-mono border border-slate-300/30 rounded-lg px-2 py-1" />
+              </div>
+            </div>
+            <div class="glass rounded-xl px-2 py-2">
+              <div class="text-[10px] font-black text-slate-600">字体（font_family）</div>
+              <select id="prop-font-family" class="w-full bg-transparent outline-none mt-1">
+                <option value="helv">Helvetica</option>
+                <option value="china-s">宋体(内置)</option>
+              </select>
+            </div>
+            <div class="glass rounded-xl px-2 py-2">
+              <div class="text-[10px] font-black text-slate-600">字号（font_size）</div>
+              <input id="prop-font-size" type="number" step="0.5" class="w-full bg-transparent outline-none mt-1 font-mono" />
+            </div>
+            <div class="glass rounded-xl px-2 py-2">
+              <div class="text-[10px] font-black text-slate-600">颜色（font_color）</div>
+              <input id="prop-font-color" type="color" class="w-full bg-transparent outline-none mt-1 h-7" />
+            </div>
+            <div class="glass rounded-xl px-2 py-2">
+              <div class="text-[10px] font-black text-slate-600">粗细（font_weight）</div>
+              <select id="prop-font-weight" class="w-full bg-transparent outline-none mt-1">
+                <option value="normal">normal</option>
+                <option value="bold">bold</option>
+              </select>
+            </div>
+            <div class="glass rounded-xl px-2 py-2">
+              <div class="text-[10px] font-black text-slate-600">水平对齐（text_align）</div>
+              <select id="prop-text-align" class="w-full bg-transparent outline-none mt-1">
+                <option value="left">左对齐 (left)</option>
+                <option value="center">居中 (center)</option>
+                <option value="right">右对齐 (right)</option>
+              </select>
+            </div>
+            <div class="glass rounded-xl px-2 py-2">
+              <div class="text-[10px] font-black text-slate-600">垂直对齐（vertical_align）</div>
+              <select id="prop-vertical-align" class="w-full bg-transparent outline-none mt-1">
+                <option value="top">顶部 (top)</option>
+                <option value="middle">居中 (middle)</option>
+                <option value="bottom">底部 (bottom)</option>
+              </select>
+            </div>
+            <div class="glass rounded-xl px-2 py-2">
+              <div class="text-[10px] font-black text-slate-600">斜体（font_style）</div>
+              <select id="prop-font-style" class="w-full bg-transparent outline-none mt-1">
+                <option value="normal">normal</option>
+                <option value="italic">italic</option>
+              </select>
+            </div>
+            <div class="glass rounded-xl px-2 py-2">
+              <div class="text-[10px] font-black text-slate-600">空值策略（empty_policy）</div>
+              <select id="prop-empty-policy" class="w-full bg-transparent outline-none mt-1">
+                <option value="show_placeholder">show_placeholder</option>
+                <option value="hide">hide</option>
+                <option value="dim">dim</option>
+              </select>
+            </div>
+            <div class="glass rounded-xl px-2 py-2">
+              <div class="text-[10px] font-black text-slate-600">行高（line_height）</div>
+              <input id="prop-line-height" type="number" step="0.1" class="w-full bg-transparent outline-none mt-1 font-mono" />
+            </div>
+            <div class="glass rounded-xl px-2 py-2">
+              <div class="text-[10px] font-black text-slate-600">字间距（letter_spacing）</div>
+              <input id="prop-letter-spacing" type="number" step="0.1" class="w-full bg-transparent outline-none mt-1 font-mono" />
+            </div>
+            <div class="glass rounded-xl px-2 py-2 col-span-2">
+              <label class="inline-flex items-center gap-2 text-[10px] font-black text-slate-700">
+                <input id="prop-overflow-marker" type="checkbox" checked />
+                文本溢出显示省略号（overflow_marker）
+              </label>
+            </div>
+            <div class="glass rounded-xl px-2 py-2 col-span-2">
+              <label class="inline-flex items-center gap-2 text-[10px] font-black text-slate-700">
+                <input id="prop-text-wrap" type="checkbox" />
+                文本自动换行（text_wrap）- 适用于部门等长文本
+              </label>
+            </div>
+            <div class="glass rounded-xl px-2 py-2">
+              <div class="text-[10px] font-black text-slate-600">线条方向（line_direction）</div>
+              <select id="prop-line-direction" class="w-full bg-transparent outline-none mt-1">
+                <option value="horizontal">horizontal</option>
+                <option value="vertical">vertical</option>
+              </select>
+            </div>
+            <div class="glass rounded-xl px-2 py-2">
+              <div class="text-[10px] font-black text-slate-600">线条样式（line_style）</div>
+              <select id="prop-line-style" class="w-full bg-transparent outline-none mt-1">
+                <option value="solid">solid</option>
+                <option value="dashed">dashed</option>
+              </select>
+            </div>
+            <div class="glass rounded-xl px-2 py-2">
+              <div class="text-[10px] font-black text-slate-600">边框/线宽（stroke_width）</div>
+              <input id="prop-stroke-width" type="number" step="0.2" min="0.2" class="w-full bg-transparent outline-none mt-1 font-mono" />
+            </div>
+            <div class="glass rounded-xl px-2 py-2">
+              <div class="text-[10px] font-black text-slate-600">边框圆角（rect_radius）</div>
+              <input id="prop-rect-radius" type="number" step="0.5" min="0" class="w-full bg-transparent outline-none mt-1 font-mono" />
+            </div>
+            <div class="glass rounded-xl px-2 py-2 col-span-2">
+              <div class="text-[10px] font-black text-slate-600">边框/线颜色（stroke_color）</div>
+              <input id="prop-stroke-color" type="color" class="w-full bg-transparent outline-none mt-1 h-7" />
+            </div>
+            <div id="image-config" class="glass rounded-xl px-2 py-2 col-span-2">
+              <div class="text-[10px] font-black text-slate-600">图片地址（image_url）</div>
+              <input id="prop-image-url" placeholder="http(s)://... 或 data:image/..." class="w-full bg-transparent outline-none mt-1 text-[11px] font-mono" />
+              <div class="grid grid-cols-2 gap-2 mt-2">
+                <select id="prop-image-fit" class="bg-transparent outline-none text-[11px] border border-slate-300/30 rounded-lg px-2 py-1">
+                  <option value="contain">contain（等比完整）</option>
+                  <option value="cover">cover（铺满裁切）</option>
+                </select>
+                <input id="prop-image-upload" type="file" accept="image/png,image/jpeg,image/webp,image/gif" class="text-[10px]" />
+              </div>
+            </div>
+            <div id="stamp-config" class="glass rounded-xl px-2 py-2 col-span-2 hidden">
+              <div class="text-[10px] font-black text-slate-600">状态章专属参数</div>
+              <div class="grid grid-cols-1 gap-2 mt-2">
+                <select id="prop-stamp-status" class="bg-transparent outline-none text-[11px] border border-slate-300/30 rounded-lg px-2 py-1">
+                  <option value="auto">auto（按流程状态）</option>
+                  <option value="agree">agree（通过）</option>
+                  <option value="refuse">refuse（拒绝）</option>
+                  <option value="revoke">revoke（撤回）</option>
+                  <option value="pending">pending（审批中）</option>
+                </select>
+                <select id="prop-stamp-pack" class="bg-transparent outline-none text-[11px] border border-slate-300/30 rounded-lg px-2 py-1">
+                  <option value="default">default（当前）</option>
+                  <option value="web">web</option>
+                  <option value="client">client</option>
+                </select>
+                <input id="prop-stamp-fetch-url" placeholder="粘贴钉钉状态章URL" class="bg-transparent outline-none text-[11px] border border-slate-300/30 rounded-lg px-2 py-1" />
+              </div>
+              <button id="fetch-stamp-btn" type="button" class="mt-2 w-full rounded-lg px-3 py-1.5 text-[11px] font-black bg-emerald-600 text-white">拉取并保存本地状态章</button>
+            </div>
+            <div id="qrcode-config" class="glass rounded-xl px-2 py-2 col-span-2 hidden">
+              <div class="text-[10px] font-black text-slate-600">二维码专属参数</div>
+              <div class="grid grid-cols-1 gap-2 mt-2">
+                <select id="prop-qr-source" class="bg-transparent outline-none text-[11px] border border-slate-300/30 rounded-lg px-2 py-1">
+                  <option value="field">field（绑定字段）</option>
+                  <option value="custom">custom（自定义内容）</option>
+                </select>
+                <input id="prop-qr-value" placeholder="自定义二维码内容（URL/文本）" class="bg-transparent outline-none text-[11px] border border-slate-300/30 rounded-lg px-2 py-1 font-mono" />
+              </div>
+            </div>
+            <div id="slot-config" class="glass rounded-xl px-2 py-2 col-span-2 hidden">
+              <div class="text-[10px] font-black text-slate-600">会签自动填充参数</div>
+              <div class="grid grid-cols-1 gap-2 mt-2">
+                <select id="prop-sig-fill-mode" class="bg-transparent outline-none text-[11px] border border-slate-300/30 rounded-lg px-2 py-1">
+                  <option value="manual">manual（手动字段取值）</option>
+                  <option value="auto_sequence">auto_sequence（优先按签名组件ID自动填充，未绑定时按顺序兜底）</option>
+                </select>
+                <input id="prop-slot-index" type="number" min="1" step="1" placeholder="slot_index（无组件ID时的兜底顺序）" class="bg-transparent outline-none text-[11px] border border-slate-300/30 rounded-lg px-2 py-1 font-mono" />
+                <input id="prop-local-user-name" placeholder="local_user_name（签名组件无人员ID时绑定本地姓名）" class="bg-transparent outline-none text-[11px] border border-slate-300/30 rounded-lg px-2 py-1" />
+                <input id="prop-dept-source" value="local_user_by_signature（按签名组件匹配本地人员部门）" readonly class="bg-slate-100/60 dark:bg-slate-900/50 outline-none text-[11px] border border-slate-300/30 rounded-lg px-2 py-1" />
+              </div>
+            </div>
+            <select id="prop-renderer" class="col-span-2 glass rounded-xl px-2 py-2 outline-none">
+              <option value="text">text</option>
+              <option value="date">date</option>
+              <option value="signature">signature</option>
+              <option value="dept">dept</option>
+              <option value="label">label</option>
+              <option value="rect">rect</option>
+              <option value="line">line</option>
+              <option value="image">image</option>
+              <option value="status_stamp">status_stamp</option>
+              <option value="flow_result">flow_result</option>
+              <option value="qrcode">qrcode</option>
+            </select>
+            <button id="update-prop-btn" class="col-span-2 rounded-xl px-3 py-2 bg-indigo-600 text-white font-black">更新选中项</button>
+            <button id="delete-item-btn" class="col-span-2 rounded-xl px-3 py-2 bg-rose-600 text-white font-black">删除选中项</button>
+          </div>
+          <div class="glass rounded-xl px-3 py-3 mt-3">
+            <div class="text-[10px] font-black text-slate-600">参数中文说明（按当前控件）</div>
+            <div id="prop-help" class="text-[11px] text-slate-600 dark:text-slate-300 mt-2 leading-5">
+              选择一个控件后，会显示该控件参数含义。
+            </div>
+          </div>
+          <div class="text-[10px] text-slate-500 mt-3">
+            支持多选：批量移动；下一步可加“缩放手柄/对齐分布”。
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+  <!-- Jinja2 template syntax below is correct, editor warnings can be ignored -->
+  <script>
+    window.DESIGNER_BOOT = {
+      code: "{{ code or '' }}",
+      layout: {{ (layout or {}) | tojson }}
+    };
+  </script>
+  <script src="{{ url_for('static', filename='js/designer_edit.js') }}?v={{ asset_v }}"></script>
+{% endblock %}

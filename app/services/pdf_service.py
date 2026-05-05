@@ -1,0 +1,969 @@
+from __future__ import annotations
+
+import json
+import time
+from dataclasses import dataclass
+from datetime import datetime
+from functools import lru_cache
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
+import fitz  # PyMuPDF
+import requests
+
+from app.config import AppConfig
+
+
+@dataclass(frozen=True)
+class SignatureItem:
+    name: str
+    url: str
+    widget_id: str
+
+
+class PdfServiceError(RuntimeError):
+    pass
+
+
+@lru_cache(maxsize=1)
+def _pick_fixed_cjk_fontfile() -> Optional[str]:
+    # Prefer Song/YaHei if present, fallback to Noto CJK on Linux.
+    candidates = [
+        "/usr/share/fonts/truetype/windows/simsun.ttc",
+        "/usr/share/fonts/truetype/windows/msyh.ttc",
+        "/usr/share/fonts/truetype/arphic/uming.ttc",
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/opentype/noto/NotoSerifCJK-Regular.ttc",
+    ]
+    for p in candidates:
+        if Path(p).exists():
+            return p
+    return None
+
+
+def load_process_configs(cfg: AppConfig) -> Dict[str, Any]:
+    """
+    Reads business config from `data/process_configs.json` (or env override).
+    """
+    path = cfg.process_config_file
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if isinstance(data, dict):
+            # Keep consistent behavior: strip keys
+            return {str(k).strip(): v for k, v in data.items()}
+        return {}
+    except Exception:
+        return {}
+
+
+def load_process_node_configs(cfg: AppConfig) -> Dict[str, Any]:
+    """
+    Optional independent node config loader.
+    Priority:
+      1) PROCESS_NODE_CONFIG_FILE env (if provided)
+      2) data/process_node_configs.json
+      3) data/process_node_configs.template.json
+    """
+    candidates: List[Path] = []
+    env_path = (Path(Path(__file__).resolve().parents[2]) / "data").resolve()  # fallback anchor
+    # Prefer explicit env if user sets it
+    try:
+        import os
+
+        custom = (os.getenv("PROCESS_NODE_CONFIG_FILE") or "").strip()
+        if custom:
+            candidates.append(Path(custom))
+    except Exception:
+        pass
+    candidates.extend(
+        [
+            cfg.base_dir / "data" / "process_node_configs.json",
+            cfg.base_dir / "data" / "process_node_configs.template.json",
+            env_path / "process_node_configs.template.json",
+        ]
+    )
+    for path in candidates:
+        if not path.exists():
+            continue
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                return {str(k).strip(): v for k, v in data.items() if not str(k).startswith("_")}
+        except Exception:
+            continue
+    return {}
+
+
+def save_process_configs(cfg: AppConfig, configs: Dict[str, Any]) -> None:
+    clean = {str(k).strip(): v for k, v in (configs or {}).items()}
+    cfg.process_config_file.parent.mkdir(parents=True, exist_ok=True)
+    cfg.process_config_file.write_text(json.dumps(clean, ensure_ascii=False, indent=4), encoding="utf-8")
+
+
+def _load_history(cfg: AppConfig) -> List[Dict[str, Any]]:
+    path = cfg.process_history_file
+    if not path.exists():
+        return []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, list) else []
+    except Exception:
+        return []
+
+
+def _save_history(cfg: AppConfig, rows: List[Dict[str, Any]]) -> None:
+    cfg.process_history_file.parent.mkdir(parents=True, exist_ok=True)
+    cfg.process_history_file.write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def append_process_version(
+    *,
+    cfg: AppConfig,
+    process_code: str,
+    action: str,
+    previous: Optional[Dict[str, Any]],
+    current: Optional[Dict[str, Any]],
+    operator: str = "admin",
+    reason: str = "",
+    keep_last: int = 200,
+) -> str:
+    history = _load_history(cfg)
+    version_id = f"v_{int(time.time() * 1000)}"
+    history.append(
+        {
+            "id": version_id,
+            "process_code": str(process_code).strip(),
+            "action": action,
+            "operator": operator,
+            "reason": reason,
+            "saved_at_ms": int(time.time() * 1000),
+            "previous": previous,
+            "current": current,
+        }
+    )
+    if len(history) > keep_last:
+        history = history[-keep_last:]
+    _save_history(cfg, history)
+    return version_id
+
+
+def list_process_versions(cfg: AppConfig, process_code: str, limit: int = 20) -> List[Dict[str, Any]]:
+    p_code = str(process_code).strip()
+    rows = [x for x in _load_history(cfg) if str((x or {}).get("process_code", "")).strip() == p_code]
+    rows.sort(key=lambda x: int((x or {}).get("saved_at_ms", 0)), reverse=True)
+    return rows[:limit]
+
+
+def rollback_process_version(cfg: AppConfig, process_code: str, version_id: str, operator: str = "admin") -> Dict[str, Any]:
+    p_code = str(process_code).strip()
+    versions = _load_history(cfg)
+    target = next((x for x in versions if x.get("id") == version_id and str(x.get("process_code", "")).strip() == p_code), None)
+    if not target:
+        return {"ok": False, "msg": "未找到目标版本"}
+
+    configs = load_process_configs(cfg)
+    previous = configs.get(p_code)
+    rollback_value = target.get("current")
+    if rollback_value is None:
+        if p_code in configs:
+            del configs[p_code]
+    else:
+        configs[p_code] = rollback_value
+    save_process_configs(cfg, configs)
+    append_process_version(
+        cfg=cfg,
+        process_code=p_code,
+        action="rollback",
+        previous=previous,
+        current=configs.get(p_code),
+        operator=operator,
+        reason=f"rollback_to:{version_id}",
+    )
+    return {"ok": True, "msg": "回滚成功"}
+
+
+def list_pdf_templates(cfg: AppConfig) -> List[str]:
+    """
+    List all PDF templates in the template directory.
+    Returns a list of filenames sorted with blank templates first.
+    """
+    if not cfg.pdf_template_dir.exists():
+        return []
+    
+    templates = []
+    blank_templates = []
+    
+    for p in cfg.pdf_template_dir.iterdir():
+        if p.is_file() and p.name.lower().endswith(".pdf"):
+            filename = p.name
+            # 空白模板放在最前面
+            if filename.startswith("blank_"):
+                blank_templates.append(filename)
+            else:
+                templates.append(filename)
+    
+    # 排序：空白模板在前，其他模板按名称排序
+    blank_templates.sort()
+    templates.sort()
+    
+    return blank_templates + templates
+
+
+def render_pdf_page_png(cfg: AppConfig, filename: str, page_num: int, orient: str) -> bytes:
+    """
+    Used by the admin coordinate editor to render PDF page as PNG.
+    Keeps the original A4 scaling approach (pt == px at 72dpi).
+    """
+    pdf_path = cfg.pdf_template_dir / filename
+    doc = fitz.open(str(pdf_path))
+    try:
+        page = doc[page_num if page_num >= 0 else doc.page_count + page_num]
+        tw, th = (595, 842) if orient != "l" else (842, 595)
+        mat = fitz.Matrix(tw / page.rect.width, th / page.rect.height)
+        pix = page.get_pixmap(matrix=mat, alpha=False)
+        return pix.tobytes("png")
+    finally:
+        doc.close()
+
+
+def _iter_signatures_from_instance(instance: Dict[str, Any]) -> List[SignatureItem]:
+    signatures: List[SignatureItem] = []
+    for f in (instance or {}).get("form_component_values", []) or []:
+        ctype = f.get("component_type")
+        if ctype not in ["SignatureField", "DDAttachment"]:
+            continue
+        val = f.get("value")
+        if not val:
+            continue
+
+        widget_id = str(f.get("id") or "")
+        name = str(f.get("name") or "")
+
+        if isinstance(val, str) and val.startswith("http"):
+            signatures.append(SignatureItem(name=name, url=val, widget_id=widget_id))
+        elif isinstance(val, str) and val.startswith("["):
+            try:
+                arr = json.loads(val)
+                if isinstance(arr, list):
+                    for u in arr:
+                        if isinstance(u, str) and u.startswith("http"):
+                            signatures.append(SignatureItem(name=name, url=u, widget_id=widget_id))
+            except Exception:
+                pass
+    return signatures
+
+
+def _signature_map(signatures: List[SignatureItem]) -> Dict[str, List[SignatureItem]]:
+    m: Dict[str, List[SignatureItem]] = {}
+    for s in signatures:
+        k = str(s.widget_id or "").strip()
+        if not k:
+            continue
+        m.setdefault(k, []).append(s)
+    return m
+
+
+def _parse_dt(raw: Any) -> Optional[datetime]:
+    s = str(raw or "").strip()
+    if not s:
+        return None
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(s, fmt)
+        except Exception:
+            pass
+    return None
+
+
+def _fmt_dt(raw: Any, fmt: str) -> str:
+    dt = _parse_dt(raw)
+    if not dt:
+        return ""
+    f = (fmt or "YYYY-MM-DD").strip().upper()
+    if f == "YYYY-MM-DD":
+        return dt.strftime("%Y-%m-%d")
+    if f == "YYYY-MM-DD HH:MM":
+        return dt.strftime("%Y-%m-%d %H:%M")
+    if f == "YYYY-MM-DD HH:MM:SS":
+        return dt.strftime("%Y-%m-%d %H:%M:%S")
+    if f == "MM-DD":
+        return dt.strftime("%m-%d")
+    return dt.strftime("%Y-%m-%d")
+
+
+def _collect_node_approvals(instance: Dict[str, Any]) -> Dict[str, List[Dict[str, Any]]]:
+    by_activity: Dict[str, List[Dict[str, Any]]] = {}
+    for t in (instance or {}).get("tasks", []) or []:
+        if str(t.get("task_status") or "").upper() != "COMPLETED":
+            continue
+        activity_id = str(t.get("activity_id") or "").strip()
+        if not activity_id:
+            continue
+        row = {
+            "activity_id": activity_id,
+            "userid": str(t.get("userid") or "").strip(),
+            "taskid": str(t.get("taskid") or "").strip(),
+            "finish_time": t.get("finish_time") or "",
+            "create_time": t.get("create_time") or "",
+            "task_result": str(t.get("task_result") or "").strip(),
+        }
+        by_activity.setdefault(activity_id, []).append(row)
+    for k in list(by_activity.keys()):
+        by_activity[k].sort(key=lambda x: str(x.get("finish_time") or ""))
+    return by_activity
+
+
+def _match_rule(value: str, rule: Any) -> bool:
+    val = str(value or "").strip().lower()
+    if not val:
+        return False
+    if isinstance(rule, list):
+        return any(str(x).strip().lower() in val for x in rule if str(x).strip())
+    return str(rule or "").strip().lower() in val
+
+
+def _pick_approval_for_zone(
+    zone: Dict[str, Any],
+    approvals: List[Dict[str, Any]],
+    user_profiles: Dict[str, Any],
+    used_keys: set[str],
+    *,
+    consume: bool,
+) -> Optional[Dict[str, Any]]:
+    if not approvals:
+        return None
+    match_by = str(zone.get("match_by") or "").strip().lower()
+    rule = zone.get("match_rule")
+    pick = str(zone.get("sign_pick") or zone.get("date_pick") or "last").strip().lower()
+    pool = approvals[:]
+    if match_by and rule is not None:
+        matched = []
+        for a in pool:
+            userid = str(a.get("userid") or "").strip()
+            prof = user_profiles.get(userid, {}) if isinstance(user_profiles, dict) else {}
+            if match_by == "userid":
+                ok = _match_rule(userid, rule)
+            elif match_by == "dept_name":
+                ok = _match_rule(str(prof.get("dept_name") or ""), rule)
+            elif match_by == "title":
+                ok = _match_rule(str(prof.get("title") or ""), rule)
+            else:
+                ok = _match_rule(str(prof.get("dept_name") or "") + " " + str(prof.get("title") or ""), rule)
+            if ok:
+                matched.append(a)
+        if matched:
+            pool = matched
+    # filter used only for consume flow
+    if consume:
+        pool = [a for a in pool if f"{a.get('activity_id')}::{a.get('userid')}::{a.get('taskid')}" not in used_keys]
+    if not pool:
+        if not zone.get("fallback"):
+            return None
+        pool = approvals[:]
+    chosen = pool[0] if pick == "first" else pool[-1]
+    if consume and chosen:
+        used_keys.add(f"{chosen.get('activity_id')}::{chosen.get('userid')}::{chosen.get('taskid')}")
+    return chosen
+
+
+def _zone_rect(zone: Dict[str, Any]) -> fitz.Rect:
+    return fitz.Rect(
+        float(zone["x"]),
+        float(zone["y"]),
+        float(zone["x"]) + float(zone["w"]),
+        float(zone["y"]) + float(zone["h"]),
+    )
+
+
+def _resolve_page(doc: fitz.Document, zone: Dict[str, Any]) -> Optional[fitz.Page]:
+    page_count = doc.page_count
+    target_page = int(zone.get("page", 0))
+    page_idx = target_page if target_page >= 0 else page_count + target_page
+    if not (0 <= page_idx < page_count):
+        return None
+    return doc[page_idx]
+
+
+def _extract_dept_from_signature_name(name: str) -> str:
+    s = str(name or "").strip()
+    if not s:
+        return ""
+    for suffix in ["签名", "会签人", "会签"]:
+        if s.endswith(suffix):
+            s = s[: -len(suffix)].strip()
+            break
+    return s
+
+
+def _fit_rect_keep_ratio(container: fitz.Rect, img_w: int, img_h: int, padding: float = 1.0) -> fitz.Rect:
+    rect = fitz.Rect(container)
+    if padding > 0:
+        rect.x0 += padding
+        rect.y0 += padding
+        rect.x1 -= padding
+        rect.y1 -= padding
+    cw = max(1.0, rect.width)
+    ch = max(1.0, rect.height)
+    if img_w <= 0 or img_h <= 0:
+        return rect
+    scale = min(cw / float(img_w), ch / float(img_h))
+    tw = float(img_w) * scale
+    th = float(img_h) * scale
+    ox = rect.x0 + (cw - tw) / 2.0
+    oy = rect.y0 + (ch - th) / 2.0
+    return fitz.Rect(ox, oy, ox + tw, oy + th)
+
+
+def _insert_textbox_autofit(
+    page: fitz.Page,
+    rect: fitz.Rect,
+    text: str,
+    *,
+    max_fontsize: float,
+    min_fontsize: float,
+    align: int = 1,
+    color: Tuple[float, float, float] = (0, 0, 0),
+    fontname: str = "helv",
+    fontfile: Optional[str] = None,
+    rotate: int = 0,
+) -> None:
+    s = str(text or "").strip()
+    if not s:
+        return
+    fs = float(max_fontsize)
+    min_fs = float(min_fontsize)
+    while fs >= min_fs:
+        try:
+            left = page.insert_textbox(
+                rect,
+                s,
+                fontsize=fs,
+                fontname=fontname,
+                fontfile=fontfile,
+                color=color,
+                align=align,
+                overlay=True,
+                rotate=rotate,
+            )
+            if left >= 0:
+                return
+        except Exception:
+            pass
+        fs -= 0.5
+    # last fallback
+    page.insert_textbox(
+        rect,
+        s,
+        fontsize=min_fs,
+        fontname=fontname,
+        fontfile=fontfile,
+        color=color,
+        align=align,
+        overlay=True,
+        rotate=rotate,
+    )
+
+
+def _collect_dept_date_map(instance: Dict[str, Any], node_config: Optional[Dict[str, Any]]) -> Tuple[Dict[str, str], List[str]]:
+    user_profiles = (node_config or {}).get("user_profiles") or {}
+    dept_to_dates: Dict[str, List[Any]] = {}
+    fallback_dates: List[str] = []
+    for t in (instance or {}).get("tasks", []) or []:
+        if str(t.get("task_status") or "").upper() != "COMPLETED":
+            continue
+        finish_time = t.get("finish_time") or ""
+        if not finish_time:
+            continue
+        fallback_dates.append(str(finish_time))
+        userid = str(t.get("userid") or "").strip()
+        prof = user_profiles.get(userid, {}) if isinstance(user_profiles, dict) else {}
+        dept = str((prof or {}).get("dept_name") or "").strip()
+        if dept:
+            dept_to_dates.setdefault(dept, []).append(finish_time)
+
+    dept_date_map: Dict[str, str] = {}
+    for dept, arr in dept_to_dates.items():
+        arr2 = sorted([str(x) for x in arr if x])
+        if arr2:
+            dept_date_map[dept] = arr2[-1]
+    fallback_raw = [str(x) for x in sorted(fallback_dates) if str(x)]
+    return dept_date_map, fallback_raw
+
+
+def _render_countersign_slots(
+    *,
+    doc: fitz.Document,
+    cfg: AppConfig,
+    process_config: Dict[str, Any],
+    signatures: List[SignatureItem],
+    instance: Dict[str, Any],
+    node_config: Optional[Dict[str, Any]],
+    session: requests.Session,
+) -> Dict[str, Any]:
+    """
+    Render dynamic countersign info into empty slots:
+      top row: department (left) + date (right, MM-DD), bottom row: signature.
+    """
+    slots = list((process_config or {}).get("countersign_slots") or [])
+    if not slots:
+        return {"enabled": False, "inserted": 0, "warnings": []}
+
+    sig_rows: List[Dict[str, Any]] = []
+    for s in signatures:
+        dept = _extract_dept_from_signature_name(s.name)
+        sig_rows.append({"dept": dept, "name": s.name, "url": s.url, "widget_id": s.widget_id})
+    if not sig_rows:
+        return {"enabled": True, "inserted": 0, "warnings": ["无可用签名"]}
+
+    dept_date_map, fallback_dates = _collect_dept_date_map(instance, node_config)
+    fallback_idx = 0
+    inserted = 0
+    warnings: List[str] = []
+    cjk_fontfile = _pick_fixed_cjk_fontfile()
+
+    # Keep stable behavior: signed field order first; if overflow then truncate with warning.
+    row_count = min(len(sig_rows), len(slots))
+    if len(sig_rows) > len(slots):
+        warnings.append(f"会签数量({len(sig_rows)})超过槽位数量({len(slots)})，超出部分未渲染")
+
+    for i in range(row_count):
+        row = sig_rows[i]
+        slot = slots[i]
+        page = _resolve_page(doc, slot)
+        if not page:
+            warnings.append(f"槽位{i+1}页码无效")
+            continue
+        slot_rect = _zone_rect(slot)
+        page_rot = int(getattr(page, "rotation", 0) or 0) % 360
+        if page_rot:
+            try:
+                slot_rect = slot_rect * page.derotation_matrix
+            except Exception:
+                pass
+
+        # Three-box manual mode (preferred):
+        # slot.dept_box / slot.date_box / slot.sign_box
+        # Fallback to auto split when not provided.
+        def _box_rect(slot_obj: Dict[str, Any], key: str, fallback: fitz.Rect) -> fitz.Rect:
+            box = slot_obj.get(key)
+            if isinstance(box, dict) and all(k in box for k in ("x", "y", "w", "h")):
+                r = _zone_rect(box)
+                if page_rot:
+                    try:
+                        r = r * page.derotation_matrix
+                    except Exception:
+                        pass
+                return r
+            return fitz.Rect(fallback)
+
+        sign_h = float(slot.get("sign_h", slot.get("sign_height", 0)) or 0)
+        if sign_h > 0:
+            sign_top = max(slot_rect.y0 + 6.0, slot_rect.y1 - sign_h)
+            auto_sign_rect = fitz.Rect(slot_rect.x0, sign_top, slot_rect.x1, slot_rect.y1)
+            auto_top_rect = fitz.Rect(slot_rect.x0, slot_rect.y0, slot_rect.x1, sign_top)
+        else:
+            sh = slot_rect.height
+            top_h = sh * float(slot.get("top_ratio", 0.33) or 0.33)
+            auto_top_rect = fitz.Rect(slot_rect.x0, slot_rect.y0, slot_rect.x1, slot_rect.y0 + top_h)
+            auto_sign_rect = fitz.Rect(slot_rect.x0, auto_top_rect.y1, slot_rect.x1, slot_rect.y1)
+
+        # In auto mode, department/date share top area via newline text.
+        top_rect = _box_rect(slot, "top_box", auto_top_rect)
+        sign_rect = _box_rect(slot, "sign_box", auto_sign_rect)
+        dept_rect = _box_rect(slot, "dept_box", top_rect)
+        date_rect = _box_rect(slot, "date_box", top_rect)
+
+        dept_text = str(row.get("dept") or "").strip()
+        date_raw = dept_date_map.get(dept_text, "")
+        date_text = _fmt_dt(date_raw, str(slot.get("date_format", "MM-DD") or "MM-DD")) if date_raw else ""
+        if not date_text and fallback_idx < len(fallback_dates):
+            date_text = _fmt_dt(fallback_dates[fallback_idx], str(slot.get("date_format", "MM-DD") or "MM-DD"))
+            fallback_idx += 1
+        text_rotate = int(slot.get("text_rotate", 0) or 0)
+        use_separate_boxes = isinstance(slot.get("dept_box"), dict) or isinstance(slot.get("date_box"), dict)
+        if dept_text and use_separate_boxes:
+            try:
+                _insert_textbox_autofit(
+                    page,
+                    dept_rect,
+                    dept_text,
+                    max_fontsize=float(slot.get("dept_font_size", 8.5) or 8.5),
+                    min_fontsize=float(slot.get("dept_min_font_size", 5.5) or 5.5),
+                    align=1,
+                    color=(0, 0, 0),
+                    fontname=str(slot.get("dept_font_name") or ("fixed_cjk" if cjk_fontfile else "helv")),
+                    fontfile=cjk_fontfile,
+                    rotate=text_rotate,
+                )
+            except Exception:
+                pass
+            if date_text:
+                try:
+                    _insert_textbox_autofit(
+                        page,
+                        date_rect,
+                        date_text,
+                        max_fontsize=float(slot.get("date_font_size", 7.5) or 7.5),
+                        min_fontsize=float(slot.get("date_min_font_size", 6.0) or 6.0),
+                        align=1,
+                        color=(0, 0, 0),
+                        fontname="helv",
+                        rotate=text_rotate,
+                    )
+                except Exception:
+                    pass
+        elif dept_text:
+            try:
+                dept_date_text = dept_text
+                if date_text:
+                    dept_date_text = f"{dept_text}\n{date_text}"
+                _insert_textbox_autofit(
+                    page,
+                    top_rect,
+                    dept_date_text,
+                    max_fontsize=float(slot.get("dept_font_size", 8.5) or 8.5),
+                    min_fontsize=float(slot.get("dept_min_font_size", 5.5) or 5.5),
+                    align=1,
+                    color=(0, 0, 0),
+                    fontname=str(slot.get("dept_font_name") or ("fixed_cjk" if cjk_fontfile else "helv")),
+                    fontfile=cjk_fontfile,
+                    rotate=text_rotate,
+                )
+            except Exception:
+                pass
+        if not dept_text and date_text and not use_separate_boxes:
+            try:
+                _insert_textbox_autofit(
+                    page,
+                    top_rect,
+                    date_text,
+                    max_fontsize=float(slot.get("date_font_size", 7.5) or 7.5),
+                    min_fontsize=float(slot.get("date_min_font_size", 6.0) or 6.0),
+                    align=1,
+                    color=(0, 0, 0),
+                    fontname="helv",
+                    rotate=text_rotate,
+                )
+            except Exception:
+                pass
+
+        try:
+            img_res = session.get(str(row.get("url") or ""), timeout=cfg.request_timeout_seconds)
+            if img_res.status_code != 200:
+                warnings.append(f"{dept_text or row.get('name')}: 签名下载失败({img_res.status_code})")
+                continue
+            try:
+                img_info = fitz.image_profile(img_res.content) or {}
+                iw = int(img_info.get("width") or 0)
+                ih = int(img_info.get("height") or 0)
+            except Exception:
+                iw, ih = 0, 0
+            img_rect = _fit_rect_keep_ratio(sign_rect, iw, ih, padding=float(slot.get("sign_padding", 1.5) or 1.5))
+            rotate_fix = (180 - page_rot) % 360 if page_rot else 180
+            page.insert_image(img_rect, stream=img_res.content, rotate=rotate_fix)
+            inserted += 1
+        except Exception:
+            warnings.append(f"{dept_text or row.get('name')}: 签名插入失败")
+            continue
+
+    return {"enabled": True, "inserted": inserted, "warnings": warnings}
+
+
+def _render_node_overlays(
+    *,
+    doc: fitz.Document,
+    cfg: AppConfig,
+    node_config: Dict[str, Any],
+    signatures: List[SignatureItem],
+    instance: Dict[str, Any],
+    session: requests.Session,
+) -> Dict[str, Any]:
+    report = {"node_signature_inserted": 0, "node_date_inserted": 0, "node_unmatched": []}
+    zones = list((node_config or {}).get("node_zones") or [])
+    if not zones:
+        return report
+    approvals_by_activity = _collect_node_approvals(instance)
+    sig_by_widget = _signature_map(signatures)
+    user_profiles = (node_config or {}).get("user_profiles") or {}
+    used_keys: set[str] = set()
+    for zone in zones:
+        bind_type = str(zone.get("bind_type") or "").strip().lower()
+        if bind_type not in ("node_signature", "node_date"):
+            continue
+        activity_id = str(zone.get("activity_id") or "").strip()
+        approvals = approvals_by_activity.get(activity_id, []) if activity_id else []
+        ap = _pick_approval_for_zone(zone, approvals, user_profiles, used_keys, consume=(bind_type == "node_signature"))
+        if not ap:
+            report["node_unmatched"].append(zone.get("name") or bind_type)
+            continue
+        page = _resolve_page(doc, zone)
+        if not page:
+            continue
+        rect = _zone_rect(zone)
+        page_rot = int(getattr(page, "rotation", 0) or 0) % 360
+        if page_rot:
+            try:
+                rect = rect * page.derotation_matrix
+            except Exception:
+                pass
+        if bind_type == "node_signature":
+            candidate_widget = str(zone.get("widget_id") or "").strip()
+            if not candidate_widget:
+                prof = user_profiles.get(str(ap.get("userid") or "").strip(), {})
+                candidate_widget = str((prof or {}).get("signature_widget_id") or "").strip()
+            sig = None
+            if candidate_widget and sig_by_widget.get(candidate_widget):
+                sig = sig_by_widget[candidate_widget][0]
+            if not sig:
+                # Fallback for handwritten/co-sign scenarios:
+                # Sometimes the signature image url is not present in form_component_values.
+                # Allow manual seeding via node_config.user_profiles[userid].signature_url.
+                prof = user_profiles.get(str(ap.get("userid") or "").strip(), {}) if isinstance(user_profiles, dict) else {}
+                manual_url: Optional[str] = None
+                if isinstance(prof, dict):
+                    v = prof.get("signature_url")
+                    if isinstance(v, str) and v.startswith("http"):
+                        manual_url = v
+                    else:
+                        vs = prof.get("signature_urls")
+                        if isinstance(vs, list) and vs:
+                            first = vs[0]
+                            if isinstance(first, str) and first.startswith("http"):
+                                manual_url = first
+
+                if manual_url:
+                    try:
+                        img_res = session.get(manual_url, timeout=cfg.request_timeout_seconds)
+                        if img_res.status_code != 200:
+                            report["node_unmatched"].append(zone.get("name") or "node_signature")
+                            continue
+                        rotate_fix = (180 - page_rot) % 360 if page_rot else 180
+                        page.insert_image(rect, stream=img_res.content, rotate=rotate_fix)
+                        report["node_signature_inserted"] += 1
+                        continue
+                    except Exception:
+                        report["node_unmatched"].append(zone.get("name") or "node_signature")
+                        continue
+
+                report["node_unmatched"].append(zone.get("name") or "node_signature")
+                continue
+            try:
+                img_res = session.get(sig.url, timeout=cfg.request_timeout_seconds)
+                if img_res.status_code != 200:
+                    continue
+                rotate_fix = (180 - page_rot) % 360 if page_rot else 180
+                page.insert_image(rect, stream=img_res.content, rotate=rotate_fix)
+                report["node_signature_inserted"] += 1
+            except Exception:
+                continue
+        elif bind_type == "node_date":
+            date_text = _fmt_dt(ap.get("finish_time"), str(zone.get("date_format") or "YYYY-MM-DD"))
+            if not date_text:
+                continue
+            try:
+                page.insert_textbox(
+                    rect,
+                    date_text,
+                    fontsize=float(zone.get("font_size", 8) or 8),
+                    fontname="helv",
+                    color=(0, 0, 0),
+                    align=0,
+                    overlay=True,
+                    rotate=0,
+                )
+                report["node_date_inserted"] += 1
+            except Exception:
+                continue
+    return report
+
+
+def generate_print_pdf(
+    *,
+    cfg: AppConfig,
+    process_config: Dict[str, Any],
+    instance_id: str,
+    instance: Dict[str, Any],
+    approval_no: str,
+    node_config: Optional[Dict[str, Any]] = None,
+    http_session: Optional[requests.Session] = None,
+    source_pdf_bytes: Optional[bytes] = None,
+) -> Tuple[Path, List[SignatureItem], Dict[str, Any]]:
+    """
+    Generates stamped PDF according to `process_config`.
+
+    Hard requirements:
+    - Do not change coordinate algorithm (72DPI/pt == px logic).
+    - Keep multi-match logic (WidgetID + Name) unchanged.
+    - Must check page_idx bounds before insert_image.
+    """
+    session = http_session or requests.Session()
+
+    signatures = _iter_signatures_from_instance(instance)
+    base_pdf = process_config.get("base_pdf")
+    if not base_pdf:
+        raise PdfServiceError("base_pdf not configured")
+
+    pdf_path = cfg.pdf_template_dir / str(base_pdf)
+    if not source_pdf_bytes and not pdf_path.exists():
+        raise PdfServiceError(f"template not found: {pdf_path}")
+
+    out_name = f"print_{instance_id}_{int(time.time() * 1000)}.pdf"
+    out_path = cfg.output_dir / out_name
+    cfg.output_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        doc = fitz.open(stream=source_pdf_bytes, filetype="pdf") if source_pdf_bytes else fitz.open(str(pdf_path))
+        page_count = doc.page_count
+        zones = process_config.get("zones", []) or []
+        matched_relation_count = 0
+        inserted_count = 0
+        unmatched_signature_names: List[str] = []
+
+        # Insert approval number as real PDF text (searchable).
+        # Use visual coordinates directly to keep stable horizontal layout in preview.
+        first_page = doc[0]
+        page_rot = int(getattr(first_page, "rotation", 0) or 0) % 360
+        text_rotate = page_rot if page_rot in (0, 90, 180, 270) else 0
+        text = str(approval_no or "").strip()
+        if text:
+            # Keep it ASCII-only to avoid embedding large CJK fonts.
+            # This still remains searchable in PDF archive systems.
+            anchor = fitz.Point(36, 30)
+            if page_rot:
+                try:
+                    anchor = anchor * first_page.derotation_matrix
+                except Exception:
+                    pass
+            try:
+                first_page.insert_text(
+                    anchor,
+                    f"Dingding NO: {text}",
+                    fontsize=12.5,
+                    fontname="helv",
+                    color=(0.1, 0.2, 0.85),
+                    overlay=True,
+                    rotate=text_rotate,
+                )
+            except Exception:
+                first_page.insert_text(
+                    anchor,
+                    f"Dingding NO: {text}",
+                    fontsize=12.5,
+                    fontname="helv",
+                    color=(0, 0, 0),
+                    overlay=True,
+                    rotate=text_rotate,
+                )
+
+        for sig in signatures:
+            sig_matched = False
+            use_slots = bool((process_config or {}).get("countersign_slots"))
+            if use_slots:
+                # Dynamic countersign-slot mode: skip fixed zone insertion.
+                break
+            for zone in process_config.get("zones", []) or []:
+                # Keep original multi-match logic:
+                # - match widget_id OR role/name substring
+                role = str(zone.get("match_role") or "")
+                zone_widget_id = str(zone.get("widget_id") or "").strip()
+                # Prefer explicit widget_id binding when present; fallback to role/name match only for unbound zones.
+                if (zone_widget_id and zone_widget_id == str(sig.widget_id or "")) or (
+                    (not zone_widget_id) and (role and role in sig.name)
+                ):
+                    sig_matched = True
+                    matched_relation_count += 1
+                    try:
+                        img_res = session.get(sig.url, timeout=cfg.request_timeout_seconds)
+                    except Exception:
+                        continue
+                    if img_res.status_code != 200:
+                        continue
+
+                    target_page = int(zone["page"])
+                    page_idx = target_page if target_page >= 0 else page_count + target_page
+
+                    # PDF engine hardening: bounds check before access/insert
+                    if not (0 <= page_idx < page_count):
+                        continue
+
+                    page = doc[page_idx]
+                    rect = fitz.Rect(
+                        float(zone["x"]),
+                        float(zone["y"]),
+                        float(zone["x"]) + float(zone["w"]),
+                        float(zone["y"]) + float(zone["h"]),
+                    )
+                    # Coordinate system fix for rotated PDF pages:
+                    # - The admin editor renders the "visual" page, but a PDF page may have a /Rotate flag.
+                    # - We map the visual rect back to the unrotated page coordinate system via derotation_matrix,
+                    #   then rotate the inserted image to keep it visually upright.
+                    try:
+                        page_rot = int(getattr(page, "rotation", 0) or 0) % 360
+                    except Exception:
+                        page_rot = 0
+                    try:
+                        if page_rot:
+                            rect = rect * page.derotation_matrix
+                    except Exception:
+                        # If matrix is unavailable, keep original rect
+                        pass
+                    # Some DingTalk signature images are stored upside down; compensate with 180deg.
+                    rotate_fix = (180 - page_rot) % 360 if page_rot else 180
+                    page.insert_image(rect, stream=img_res.content, rotate=rotate_fix)
+                    inserted_count += 1
+
+            if not sig_matched:
+                unmatched_signature_names.append(sig.name or "未命名签名")
+
+        node_report = _render_node_overlays(
+            doc=doc,
+            cfg=cfg,
+            node_config=node_config or {},
+            signatures=signatures,
+            instance=instance,
+            session=session,
+        )
+        slot_report = _render_countersign_slots(
+            doc=doc,
+            cfg=cfg,
+            process_config=process_config,
+            signatures=signatures,
+            instance=instance,
+            node_config=node_config or {},
+            session=session,
+        )
+
+        # Reduce output size without affecting visual quality:
+        # - garbage=4: maximize object cleanup
+        # - deflate/deflate_images/deflate_fonts: lossless stream compression
+        # - use_objstms: store objects in object streams (often smaller)
+        # - linear=1: web-fast (optional), keeps preview snappy
+        doc.save(
+            str(out_path),
+            garbage=4,
+            clean=1,
+            deflate=1,
+            deflate_images=1,
+            deflate_fonts=1,
+            use_objstms=1,
+        )
+        doc.close()
+        report: Dict[str, Any] = {
+            "signature_total": len(signatures),
+            "zone_total": len(zones),
+            "matched_relation_count": matched_relation_count,
+            "inserted_count": inserted_count,
+            "unmatched_signature_names": unmatched_signature_names,
+            "node_signature_inserted": node_report.get("node_signature_inserted", 0),
+            "node_date_inserted": node_report.get("node_date_inserted", 0),
+            "node_unmatched": node_report.get("node_unmatched", []),
+            "slot_enabled": slot_report.get("enabled", False),
+            "slot_inserted": slot_report.get("inserted", 0),
+            "slot_warnings": slot_report.get("warnings", []),
+        }
+        return out_path, signatures, report
+    except Exception as e:
+        raise PdfServiceError(f"PDF合成失败: {e}") from e
+

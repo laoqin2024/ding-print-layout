@@ -1,0 +1,123 @@
+# ===============================
+# 环境变量和敏感信息
+# ===============================
+.env
+.env.local
+.env.*.local
+.env。1
+
+# ===============================
+# Python
+# ===============================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# ===============================
+# 虚拟环境
+# ===============================
+venv/
+ENV/
+env/
+.venv
+
+# ===============================
+# IDE
+# ===============================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# ===============================
+# 项目特定文件
+# ===============================
+# 生成的 PDF 输出
+static/outputs/*.pdf
+!static/outputs/.gitkeep
+
+# 用户上传的 PDF 模板（可能包含敏感信息）
+templates/pdf_templates/*.pdf
+!templates/pdf_templates/.gitkeep
+
+# 流程配置（可能包含敏感的流程信息）
+data/process_configs.json
+data/process_versions.json
+
+# 用户数据
+data/users.json
+
+# 签名绑定数据
+data/signature_bindings.json
+
+# 日志文件
+*.log
+logs/
+
+# 临时文件
+*.tmp
+*.temp
+.cache/
+
+# ===============================
+# 测试和覆盖率
+# ===============================
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# ===============================
+# 数据库
+# ===============================
+*.db
+*.sqlite
+*.sqlite3
+
+# ===============================
+# 备份文件
+# ===============================
+*.bak
+*.backup
+*~
+
+# ===============================
+# 操作系统
+# ===============================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ===============================
+# 开发文档（可选）
+# ===============================
+# 如果不想提交开发过程文档，取消下面的注释
+# docs/
+
+# ===============================
+# 开发文档（不提交）
+# ===============================
+docs/development/

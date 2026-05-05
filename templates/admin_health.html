@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}后台系统自检{% endblock %}
+
+{% block body %}
+  <div class="p-4 sm:p-8 lg:p-10">
+    <div class="max-w-4xl mx-auto space-y-6">
+      <header class="glass rounded-3xl p-6 sm:p-8 border border-slate-200/20 dark:border-slate-700/30">
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <h1 class="text-2xl sm:text-3xl font-black tracking-tight">后台系统自检</h1>
+            <p class="text-sm text-slate-500 dark:text-slate-400 mt-2">用于快速验证流程接口、实例接口和 PDF 渲染链路</p>
+          </div>
+          <a href="/admin" class="px-4 py-2 rounded-xl font-black text-xs glass">返回后台</a>
+        </div>
+
+        <div class="mt-5 flex flex-wrap items-center gap-3 text-xs">
+          <span class="px-3 py-1 rounded-xl border {{ 'border-emerald-500/30 text-emerald-700 dark:text-emerald-300 bg-emerald-500/10' if result.ok else 'border-rose-500/30 text-rose-700 dark:text-rose-300 bg-rose-500/10' }}">
+            {{ '全部通过' if result.ok else '存在异常' }}
+          </span>
+          <span class="text-slate-500 dark:text-slate-400">process_code: {{ result.meta.process_code or '(无配置)' }}</span>
+          <span class="text-slate-500 dark:text-slate-400">admin_userid: {{ result.meta.admin_userid }}</span>
+        </div>
+      </header>
+
+      <section class="space-y-3">
+        {% for item in result.checks %}
+          <div class="glass rounded-2xl p-4 border {{ 'border-emerald-500/20' if item.ok else 'border-rose-500/20' }}">
+            <div class="flex items-center justify-between gap-3">
+              <div class="font-black text-sm text-slate-800 dark:text-slate-100">{{ item.key }}</div>
+              <span class="text-[11px] font-black px-2 py-1 rounded-lg {{ 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300' if item.ok else 'bg-rose-500/15 text-rose-700 dark:text-rose-300' }}">
+                {{ 'PASS' if item.ok else 'FAIL' }}
+              </span>
+            </div>
+            <div class="mt-2 text-xs text-slate-600 dark:text-slate-300">{{ item.msg }}</div>
+          </div>
+        {% endfor %}
+      </section>
+
+      <div class="text-right">
+        <a href="/admin/health" class="inline-flex px-5 py-3 rounded-2xl font-black text-sm bg-blue-600/90 text-white border border-blue-500/30">
+          重新检测
+        </a>
+      </div>
+    </div>
+  </div>
+{% endblock %}

@@ -1,0 +1,413 @@
+{% extends "base.html" %}
+
+{% block title %}人员管理{% endblock %}
+
+{% block body %}
+  <div class="p-2 sm:p-4">
+    <div class="max-w-[1800px] mx-auto">
+      <header class="flex items-center justify-between gap-3 mb-4">
+        <div>
+          <h1 class="text-2xl font-black">人员管理</h1>
+          <p class="text-xs text-slate-500 mt-1">同步钉钉人员，手动编辑部门，分配签名槽位</p>
+        </div>
+        <div class="flex gap-2">
+          <a href="/admin" class="glass rounded-xl px-3 py-2 text-xs font-black">返回管理中心</a>
+          <button id="sync-btn" class="rounded-xl px-4 py-2 text-xs font-black bg-indigo-600 text-white">
+            同步组织人员
+          </button>
+          <button id="sync-mobile-btn" class="glass rounded-xl px-4 py-2 text-xs font-black text-amber-700 dark:text-amber-300 border border-amber-500/25">
+            同步手机号
+          </button>
+        </div>
+      </header>
+
+      <div class="grid grid-cols-1 xl:grid-cols-[1fr] gap-4">
+        <!-- Statistics -->
+        <section class="glass rounded-2xl p-4">
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div class="text-center py-3 rounded-xl bg-white/20 dark:bg-white/5">
+              <div id="stat-total" class="text-2xl font-black">0</div>
+              <div class="text-xs text-slate-500 mt-1">总人数</div>
+            </div>
+            <div class="text-center py-3 rounded-xl bg-emerald-500/10">
+              <div id="stat-active" class="text-2xl font-black text-emerald-700 dark:text-emerald-300">0</div>
+              <div class="text-xs text-slate-500 mt-1">在职</div>
+            </div>
+            <div class="text-center py-3 rounded-xl bg-indigo-500/10">
+              <div id="stat-slots" class="text-2xl font-black text-indigo-700 dark:text-indigo-300">0</div>
+              <div class="text-xs text-slate-500 mt-1">已分配槽位</div>
+            </div>
+            <div class="text-center py-3 rounded-xl bg-amber-500/10">
+              <div id="stat-depts" class="text-2xl font-black text-amber-700 dark:text-amber-300">0</div>
+              <div class="text-xs text-slate-500 mt-1">部门数</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Users Table -->
+        <section class="glass rounded-2xl p-4">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <div class="panel-title">人员列表</div>
+              <div class="panel-sub mt-1" id="last-sync"></div>
+            </div>
+            <div class="flex gap-2">
+              <select id="filter-dept" class="glass rounded-xl px-3 py-2 text-xs font-black outline-none">
+                <option value="">全部部门</option>
+              </select>
+              <select id="filter-slot" class="glass rounded-xl px-3 py-2 text-xs font-black outline-none">
+                <option value="">全部槽位</option>
+                <option value="assigned">已分配</option>
+                <option value="unassigned">未分配</option>
+              </select>
+              <select id="filter-active" class="glass rounded-xl px-3 py-2 text-xs font-black outline-none">
+                <option value="all">全部</option>
+                <option value="active" selected>在职</option>
+                <option value="inactive">离职</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="mb-4">
+            <input id="search-input" type="search" placeholder="搜索姓名、部门或手机号"
+              class="w-full glass rounded-xl px-4 py-3 text-sm outline-none">
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="border-b border-slate-200/20 dark:border-slate-700/30">
+                  <th class="text-left py-3 px-2 font-black text-xs text-slate-600 dark:text-slate-300">姓名</th>
+                  <th class="text-left py-3 px-2 font-black text-xs text-slate-600 dark:text-slate-300">部门</th>
+                  <th class="text-left py-3 px-2 font-black text-xs text-slate-600 dark:text-slate-300">手机号</th>
+                  <th class="text-center py-3 px-2 font-black text-xs text-slate-600 dark:text-slate-300">签名槽位</th>
+                  <th class="text-center py-3 px-2 font-black text-xs text-slate-600 dark:text-slate-300">状态</th>
+                  <th class="text-center py-3 px-2 font-black text-xs text-slate-600 dark:text-slate-300">操作</th>
+                </tr>
+              </thead>
+              <tbody id="user-table-body">
+                <tr>
+                  <td colspan="6" class="text-center py-10 text-slate-500 text-sm">
+                    点击"从钉钉同步"加载人员
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="mt-4 flex items-center justify-between gap-3 text-xs text-slate-500">
+            <div id="page-info">-</div>
+            <div class="flex gap-2">
+              <button id="prev-page" class="glass rounded-xl px-3 py-2 font-black disabled:opacity-40">上一页</button>
+              <button id="next-page" class="glass rounded-xl px-3 py-2 font-black disabled:opacity-40">下一页</button>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit User Modal -->
+  <div id="edit-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div class="glass rounded-3xl p-6 max-w-md w-full mx-4">
+      <h3 class="text-lg font-black mb-4">编辑人员信息</h3>
+      
+      <div class="space-y-3">
+        <div>
+          <label class="text-xs font-black text-slate-600 dark:text-slate-300">姓名</label>
+          <input id="edit-name" readonly class="w-full glass rounded-xl px-3 py-2 text-sm mt-1 bg-slate-100 dark:bg-slate-800">
+        </div>
+        
+        <div>
+          <label class="text-xs font-black text-slate-600 dark:text-slate-300">部门名称（可编辑）</label>
+          <input id="edit-dept" class="w-full glass rounded-xl px-3 py-2 text-sm mt-1 outline-none">
+        </div>
+        
+        <div>
+          <label class="text-xs font-black text-slate-600 dark:text-slate-300">签名槽位</label>
+          <input id="edit-slot" type="number" min="1" max="99" placeholder="留空表示不分配"
+            class="w-full glass rounded-xl px-3 py-2 text-sm mt-1 outline-none">
+        </div>
+        
+        <div>
+          <label class="inline-flex items-center gap-2 text-xs font-black cursor-pointer">
+            <input id="edit-active" type="checkbox" checked>
+            在职状态
+          </label>
+        </div>
+      </div>
+
+      <div class="flex gap-2 mt-6">
+        <button id="cancel-btn" class="flex-1 glass rounded-xl px-4 py-2 text-sm font-black">取消</button>
+        <button id="save-btn" class="flex-1 rounded-xl px-4 py-2 text-sm font-black bg-indigo-600 text-white">保存</button>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+  <script>
+    let allUsers = [];
+    let allDepts = [];
+    let currentEditUser = null;
+    let currentPage = 1;
+    const pageSize = 100;
+
+    const syncBtn = document.getElementById('sync-btn');
+    const syncMobileBtn = document.getElementById('sync-mobile-btn');
+    const userTableBody = document.getElementById('user-table-body');
+    const searchInput = document.getElementById('search-input');
+    const filterActive = document.getElementById('filter-active');
+    const filterDept = document.getElementById('filter-dept');
+    const filterSlot = document.getElementById('filter-slot');
+    const lastSync = document.getElementById('last-sync');
+    const pageInfo = document.getElementById('page-info');
+    const prevPageBtn = document.getElementById('prev-page');
+    const nextPageBtn = document.getElementById('next-page');
+    
+    const statTotal = document.getElementById('stat-total');
+    const statActive = document.getElementById('stat-active');
+    const statSlots = document.getElementById('stat-slots');
+    const statDepts = document.getElementById('stat-depts');
+    
+    const editModal = document.getElementById('edit-modal');
+    const editName = document.getElementById('edit-name');
+    const editDept = document.getElementById('edit-dept');
+    const editSlot = document.getElementById('edit-slot');
+    const editActive = document.getElementById('edit-active');
+    const cancelBtn = document.getElementById('cancel-btn');
+    const saveBtn = document.getElementById('save-btn');
+
+    // Sync organization and users from DingTalk (fast, no mobile detail)
+    syncBtn?.addEventListener('click', async () => {
+      if (!confirm('将递归同步所有子部门和人员；不会同步手机号。确认继续？')) return;
+      
+      syncBtn.disabled = true;
+      syncBtn.textContent = '同步中...';
+      
+      try {
+        const res = await fetch('/api/users/sync', { method: 'POST' });
+        const data = await res.json();
+        
+        if (data.ok) {
+          alert(data.msg);
+          loadUsers();
+        } else {
+          alert('同步失败: ' + data.msg);
+        }
+      } catch (err) {
+        alert('同步失败: ' + err.message);
+      } finally {
+        syncBtn.disabled = false;
+        syncBtn.textContent = '同步组织人员';
+      }
+    });
+
+    // Sync mobile numbers separately (requires DingTalk sensitive contact permission)
+    syncMobileBtn?.addEventListener('click', async () => {
+      if (!confirm('手机号属于敏感通讯录字段。请确认钉钉应用已开通成员详情/手机号读取权限。该操作会逐人读取详情，可能较慢，确认继续？')) return;
+      
+      syncMobileBtn.disabled = true;
+      syncMobileBtn.textContent = '手机号同步中...';
+      
+      try {
+        const res = await fetch('/api/users/sync_mobile', { method: 'POST' });
+        const data = await res.json();
+        
+        if (data.ok) {
+          alert(data.msg);
+          loadUsers();
+        } else {
+          alert('手机号同步失败: ' + data.msg);
+        }
+      } catch (err) {
+        alert('手机号同步失败: ' + err.message);
+      } finally {
+        syncMobileBtn.disabled = false;
+        syncMobileBtn.textContent = '同步手机号';
+      }
+    });
+
+    // Load users
+    async function loadUsers() {
+      try {
+        const res = await fetch('/api/users/list');
+        const data = await res.json();
+        
+        if (data.ok) {
+          allUsers = data.users || [];
+          allDepts = data.departments || [];
+          
+          if (data.last_sync) {
+            lastSync.textContent = '最后同步: ' + new Date(data.last_sync).toLocaleString('zh-CN');
+          }
+          
+          updateStats();
+          renderDeptFilter();
+          renderUsers();
+        }
+      } catch (err) {
+        console.error('加载失败:', err);
+      }
+    }
+
+    // Update statistics
+    function updateStats() {
+      const activeUsers = allUsers.filter(u => u.is_active);
+      const assignedSlots = allUsers.filter(u => u.signature_slot);
+      
+      statTotal.textContent = allUsers.length;
+      statActive.textContent = activeUsers.length;
+      statSlots.textContent = assignedSlots.length;
+      statDepts.textContent = allDepts.length;
+    }
+
+    // Render department filter
+    function renderDeptFilter() {
+      const uniqueDepts = [...new Set(allUsers.map(u => u.dept_path_name || u.dept_name))].sort();
+      filterDept.innerHTML = '<option value="">全部部门</option>' +
+        uniqueDepts.map(dept => `<option value="${dept}">${dept}</option>`).join('');
+    }
+
+    // Render users table
+    function renderUsers() {
+      const search = searchInput.value.toLowerCase();
+      const activeFilter = filterActive.value;
+      const deptFilter = filterDept.value;
+      const slotFilter = filterSlot.value;
+      
+      let filtered = allUsers.filter(user => {
+        const matchSearch = !search || 
+          user.name.toLowerCase().includes(search) ||
+          user.dept_name.toLowerCase().includes(search) ||
+          (user.dept_path_name && user.dept_path_name.toLowerCase().includes(search)) ||
+          (user.mobile && user.mobile.includes(search));
+        
+        const matchActive = activeFilter === 'all' ||
+          (activeFilter === 'active' && user.is_active) ||
+          (activeFilter === 'inactive' && !user.is_active);
+        
+        const matchDept = !deptFilter || (user.dept_path_name || user.dept_name) === deptFilter;
+        
+        const matchSlot = !slotFilter ||
+          (slotFilter === 'assigned' && user.signature_slot) ||
+          (slotFilter === 'unassigned' && !user.signature_slot);
+        
+        return matchSearch && matchActive && matchDept && matchSlot;
+      });
+      
+      if (filtered.length === 0) {
+        userTableBody.innerHTML = '<tr><td colspan="6" class="text-center py-10 text-slate-500 text-sm">无匹配结果</td></tr>';
+        if (pageInfo) pageInfo.textContent = '共 0 条';
+        if (prevPageBtn) prevPageBtn.disabled = true;
+        if (nextPageBtn) nextPageBtn.disabled = true;
+        return;
+      }
+      
+      const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+      if (currentPage > totalPages) currentPage = totalPages;
+      const start = (currentPage - 1) * pageSize;
+      const pageRows = filtered.slice(start, start + pageSize);
+      
+      if (pageInfo) pageInfo.textContent = `共 ${filtered.length} 条，当前 ${start + 1}-${Math.min(start + pageSize, filtered.length)} 条 / 第 ${currentPage}/${totalPages} 页`;
+      if (prevPageBtn) prevPageBtn.disabled = currentPage <= 1;
+      if (nextPageBtn) nextPageBtn.disabled = currentPage >= totalPages;
+      
+      userTableBody.innerHTML = pageRows.map(user => `
+        <tr class="border-b border-slate-200/10 dark:border-slate-700/20 hover:bg-white/10 dark:hover:bg-white/5">
+          <td class="py-3 px-2">
+            <div class="font-black">${user.name}</div>
+            <div class="text-[10px] text-slate-500 mt-0.5">${user.userid}</div>
+          </td>
+          <td class="py-3 px-2">
+            <div class="text-sm font-semibold">${user.dept_name}</div>
+            <div class="text-[10px] text-slate-500 mt-0.5">${user.dept_path_name || user.dept_name}</div>
+          </td>
+          <td class="py-3 px-2 text-slate-500">
+            ${user.mobile || '-'}
+          </td>
+          <td class="py-3 px-2 text-center">
+            ${user.signature_slot ? 
+              `<span class="inline-block px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 font-black text-xs">${user.signature_slot}</span>` : 
+              '<span class="text-slate-400 text-xs">未分配</span>'}
+          </td>
+          <td class="py-3 px-2 text-center">
+            ${user.is_active ? 
+              '<span class="inline-block px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-black text-xs">在职</span>' : 
+              '<span class="inline-block px-3 py-1 rounded-full bg-slate-500/20 text-slate-700 dark:text-slate-300 font-black text-xs">离职</span>'}
+          </td>
+          <td class="py-3 px-2 text-center">
+            <button onclick='editUser(${JSON.stringify(user)})' 
+                    class="glass rounded-lg px-3 py-1 text-xs font-black hover:bg-white/30 dark:hover:bg-white/10">
+              编辑
+            </button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    // Edit user
+    window.editUser = function(user) {
+      currentEditUser = user;
+      editName.value = user.name;
+      editDept.value = user.dept_name;
+      editSlot.value = user.signature_slot || '';
+      editActive.checked = user.is_active;
+      editModal.classList.remove('hidden');
+    };
+
+    // Cancel edit
+    cancelBtn?.addEventListener('click', () => {
+      editModal.classList.add('hidden');
+      currentEditUser = null;
+    });
+
+    // Save edit
+    saveBtn?.addEventListener('click', async () => {
+      if (!currentEditUser) return;
+      
+      try {
+        const res = await fetch('/api/users/update', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            userid: currentEditUser.userid,
+            dept_name: editDept.value,
+            signature_slot: editSlot.value ? parseInt(editSlot.value) : null,
+            is_active: editActive.checked,
+          }),
+        });
+        const data = await res.json();
+        
+        if (data.ok) {
+          editModal.classList.add('hidden');
+          loadUsers();
+        } else {
+          alert('保存失败: ' + data.msg);
+        }
+      } catch (err) {
+        alert('保存失败: ' + err.message);
+      }
+    });
+
+    // Search and filter
+    function resetPageAndRender() {
+      currentPage = 1;
+      renderUsers();
+    }
+    searchInput?.addEventListener('input', resetPageAndRender);
+    filterActive?.addEventListener('change', resetPageAndRender);
+    filterDept?.addEventListener('change', resetPageAndRender);
+    filterSlot?.addEventListener('change', resetPageAndRender);
+    prevPageBtn?.addEventListener('click', () => {
+      currentPage = Math.max(1, currentPage - 1);
+      renderUsers();
+    });
+    nextPageBtn?.addEventListener('click', () => {
+      currentPage += 1;
+      renderUsers();
+    });
+
+    // Initial load
+    loadUsers();
+  </script>
+{% endblock %}

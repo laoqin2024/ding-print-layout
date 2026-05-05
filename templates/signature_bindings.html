@@ -1,0 +1,389 @@
+{% extends "base.html" %}
+
+{% block title %}流程签名绑定{% endblock %}
+
+{% block body %}
+  <div class="p-2 sm:p-4">
+    <div class="max-w-[1700px] mx-auto">
+      <header class="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <div>
+          <h1 class="text-2xl font-black">流程签名控件绑定</h1>
+          <p class="text-xs text-slate-500 mt-1">按流程维护 SignatureField 与"当前实例动态来源"的关系，不固定绑定某个人</p>
+        </div>
+        <div class="flex gap-2">
+          <a href="/admin" class="glass rounded-xl px-3 py-2 text-xs font-black">返回管理中心</a>
+          <a href="/admin/users" class="glass rounded-xl px-3 py-2 text-xs font-black">人员管理</a>
+        </div>
+      </header>
+
+      <!-- 第一步：选择流程和实例 -->
+      <section class="glass rounded-2xl p-4 mb-4">
+        <div class="flex items-center gap-2 mb-3">
+          <div class="w-8 h-8 rounded-xl bg-indigo-500/15 flex items-center justify-center">
+            <span class="text-sm font-black text-indigo-700 dark:text-indigo-300">1</span>
+          </div>
+          <div>
+            <div class="text-sm font-black">选择流程和实例</div>
+            <div class="text-[11px] text-slate-500">选择要配置的流程，并填写一个典型已完成实例用于拉取控件和节点信息</div>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 lg:grid-cols-[1.2fr_1.4fr_auto] gap-3 items-end">
+          <div>
+            <label class="text-xs font-black text-slate-600 dark:text-slate-300">流程</label>
+            <select id="process-select" class="w-full glass rounded-xl px-3 py-2 text-xs outline-none mt-1">
+              <option value="">加载中...</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-xs font-black text-slate-600 dark:text-slate-300">实例 ID（建议填写一个典型已完成实例）</label>
+            <input id="instance-id" class="w-full glass rounded-xl px-3 py-2 text-xs outline-none mt-1 font-mono" placeholder="process_instance_id">
+          </div>
+          <button id="load-fields-btn" class="rounded-xl px-4 py-2 text-xs font-black bg-indigo-600 text-white">拉取控件/节点</button>
+        </div>
+        <div id="status" class="mt-3 text-xs text-slate-500"></div>
+      </section>
+
+      <!-- 第二步：维护审批节点标题（可选） -->
+      <section id="node-title-panel" class="hidden glass rounded-2xl p-4 mb-4">
+        <div class="flex items-center gap-2 mb-3">
+          <div class="w-8 h-8 rounded-xl bg-amber-500/15 flex items-center justify-center">
+            <span class="text-sm font-black text-amber-700 dark:text-amber-300">2</span>
+          </div>
+          <div class="flex-1">
+            <div class="text-sm font-black">维护审批节点标题（可选）</div>
+            <div class="text-[11px] text-slate-500">钉钉实例接口未返回节点标题时，可在这里给 activity_id 维护可读名称，绑定下拉会优先显示该名称</div>
+          </div>
+          <button id="save-node-title-btn" type="button" class="glass rounded-xl px-3 py-2 text-xs font-black">保存节点标题</button>
+        </div>
+        <div id="node-title-list" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2"></div>
+      </section>
+
+      <!-- 第三步：配置签名控件来源规则 -->
+      <section class="glass rounded-2xl p-4 mb-4">
+        <div class="flex items-center gap-2 mb-3">
+          <div class="w-8 h-8 rounded-xl bg-emerald-500/15 flex items-center justify-center">
+            <span class="text-sm font-black text-emerald-700 dark:text-emerald-300">3</span>
+          </div>
+          <div class="flex-1">
+            <div class="text-sm font-black">配置签名控件来源规则</div>
+            <div class="text-[11px] text-slate-500">推荐绑定到表单中的"会签人/联系人"字段；打印时读取当前实例字段值，再查 users.json 获取部门</div>
+          </div>
+          <input id="source-search" class="glass rounded-xl px-3 py-2 text-xs outline-none w-72" placeholder="搜索来源字段/节点">
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="border-b border-slate-200/20 dark:border-slate-700/30">
+                <th class="text-left py-3 px-2 font-black text-xs">签名控件名称</th>
+                <th class="text-left py-3 px-2 font-black text-xs">签名组件 ID</th>
+                <th class="text-left py-3 px-2 font-black text-xs">人员来源类型</th>
+                <th class="text-left py-3 px-2 font-black text-xs">绑定来源</th>
+                <th class="text-left py-3 px-2 font-black text-xs">当前实例预览值</th>
+                <th class="text-center py-3 px-2 font-black text-xs">状态</th>
+              </tr>
+            </thead>
+            <tbody id="binding-body">
+              <tr><td colspan="6" class="text-center py-10 text-slate-500">请选择流程后拉取控件/节点</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- 第四步：保存配置 -->
+      <section class="glass rounded-2xl p-4">
+        <div class="flex items-center gap-2 mb-3">
+          <div class="w-8 h-8 rounded-xl bg-violet-500/15 flex items-center justify-center">
+            <span class="text-sm font-black text-violet-700 dark:text-violet-300">4</span>
+          </div>
+          <div class="flex-1">
+            <div class="text-sm font-black">保存配置</div>
+            <div class="text-[11px] text-slate-500">确认绑定关系无误后，点击保存按钮将配置写入系统</div>
+          </div>
+          <button id="save-btn" class="rounded-xl px-4 py-2 text-sm font-black bg-emerald-600 text-white">保存绑定配置</button>
+        </div>
+        <div class="text-xs text-slate-500 leading-relaxed">
+          <div class="font-black mb-1">配置说明：</div>
+          <div>· 表单字段来源：打印时从当前实例读取该字段值，按姓名匹配 users.json 获取部门</div>
+          <div>· 审批节点来源：打印时从当前实例该节点任务中获取审批人，按 userid/姓名匹配 users.json 获取部门</div>
+          <div>· 配置保存后立即生效，下次打印/预览时会按新规则渲染部门信息</div>
+        </div>
+      </section>
+    </div>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function(){
+  const processSelect = document.getElementById('process-select');
+  const instanceIdEl = document.getElementById('instance-id');
+  const loadFieldsBtn = document.getElementById('load-fields-btn');
+  const saveBtn = document.getElementById('save-btn');
+  const statusEl = document.getElementById('status');
+  const body = document.getElementById('binding-body');
+  const sourceSearch = document.getElementById('source-search');
+  const nodeTitlePanel = document.getElementById('node-title-panel');
+  const nodeTitleList = document.getElementById('node-title-list');
+  const saveNodeTitleBtn = document.getElementById('save-node-title-btn');
+
+  let processes = [];
+  let signatureFields = [];
+  let sourceFields = [];
+  let nodes = [];
+  let currentBindings = {};
+  let localUsers = [];
+
+  function setStatus(text, isError){
+    statusEl.textContent = text || '';
+    statusEl.className = 'mt-3 text-xs ' + (isError ? 'text-rose-600' : 'text-slate-500');
+  }
+
+  function normalizeDeptKey(s){
+    return String(s || '').replace(/签名|会签人|审批人|部门|选择/g, '').trim();
+  }
+
+  function sourceOptionsFor(field){
+    const q = String(sourceSearch.value || '').trim().toLowerCase();
+    const sigKey = normalizeDeptKey(field.field_name);
+    const rows = [];
+    sourceFields.forEach(f => {
+      const label = `${f.field_name || f.field_id} · ${f.field_type || ''}`;
+      const hay = `${label} ${f.field_id || ''} ${f.value_preview || ''}`.toLowerCase();
+      if (q && !hay.includes(q)) return;
+      const score = sigKey && normalizeDeptKey(f.field_name).includes(sigKey) ? 0 : 1;
+      rows.push({ kind: 'form_field', score, id: f.field_id, name: f.field_name, type: f.field_type, label, preview: f.value_preview || '' });
+    });
+    nodes.forEach(n => {
+      const label = `${n.activity_name || n.activity_id} · 审批节点`;
+      const hay = `${label} ${n.userid || ''}`.toLowerCase();
+      if (q && !hay.includes(q)) return;
+      rows.push({ kind: 'approval_node', score: 2, id: n.activity_id, name: n.activity_name || n.activity_id, type: 'ApprovalNode', label, preview: n.userid || '' });
+    });
+    rows.sort((a,b) => a.score - b.score || String(a.label).localeCompare(String(b.label), 'zh-Hans-CN'));
+    return rows;
+  }
+
+  function bindingStatus(binding){
+    if (!binding || !binding.source_type) return '<span class="text-amber-600 font-black">未绑定</span>';
+    if (binding.source_type === 'form_field' && binding.source_field_id) return '<span class="text-emerald-600 font-black">已绑定</span>';
+    if (binding.source_type === 'approval_node' && binding.activity_id) return '<span class="text-emerald-600 font-black">已绑定</span>';
+    return '<span class="text-amber-600 font-black">未绑定</span>';
+  }
+
+  function renderNodeTitles(){
+    if (!nodeTitlePanel || !nodeTitleList) return;
+    nodeTitlePanel.classList.toggle('hidden', !nodes.length);
+    nodeTitleList.innerHTML = '';
+    nodes.forEach(n => {
+      const wrap = document.createElement('div');
+      wrap.className = 'glass rounded-xl px-3 py-2';
+      const userid = n.userid || '';
+      const user = localUsers.find(u => u.userid === userid) || {};
+      const userName = user.name || '';
+      const userDept = user.dept_name || user.dept_path_name || '';
+      const status = n.task_status || '';
+      const result = n.task_result || '';
+      const statusText = status === 'COMPLETED' ? (result === 'AGREE' ? '已同意' : result === 'REFUSE' ? '已拒绝' : '已完成') : status;
+      wrap.innerHTML = `
+        <div class="grid grid-cols-2 gap-2 mb-2">
+          <div>
+            <div class="text-[10px] font-black text-slate-600 dark:text-slate-400 mb-1">节点 ID</div>
+            <div class="text-xs font-mono text-slate-700 dark:text-slate-200">${n.activity_id || '-'}</div>
+          </div>
+          <div>
+            <div class="text-[10px] font-black text-slate-600 dark:text-slate-400 mb-1">状态</div>
+            <div class="text-xs text-slate-700 dark:text-slate-200">${statusText || '-'}</div>
+          </div>
+          <div>
+            <div class="text-[10px] font-black text-slate-600 dark:text-slate-400 mb-1">审批人</div>
+            <div class="text-xs text-slate-700 dark:text-slate-200 font-black">${userName || userid || '-'}</div>
+          </div>
+          <div>
+            <div class="text-[10px] font-black text-slate-600 dark:text-slate-400 mb-1">部门</div>
+            <div class="text-xs text-slate-700 dark:text-slate-200">${userDept || '-'}</div>
+          </div>
+        </div>
+        <div>
+          <div class="text-[10px] font-black text-slate-600 dark:text-slate-400 mb-1">节点标题（可编辑）</div>
+          <input data-node-title-id="${n.activity_id || ''}" value="${(n.activity_name || '').replace(/"/g, '&quot;')}" placeholder="根据审批人和部门填写节点标题，如：品保部会签人" class="w-full bg-transparent outline-none text-xs border border-slate-300/30 rounded-lg px-2 py-1.5" />
+        </div>`;
+      nodeTitleList.appendChild(wrap);
+    });
+  }
+
+  async function saveNodeTitles(){
+    const code = processSelect.value;
+    if (!code){ alert('请先选择流程'); return; }
+    const map = {};
+    nodeTitleList?.querySelectorAll('[data-node-title-id]').forEach(input => {
+      const key = input.getAttribute('data-node-title-id') || '';
+      const val = input.value || '';
+      if (key && val.trim()) map[key] = val.trim();
+    });
+    const res = await fetch('/api/signature_bindings/node_names', { method: 'POST', headers: {'content-type':'application/json'}, body: JSON.stringify({process_code: code, node_names: map}) });
+    const data = await res.json();
+    if (!data.ok){ setStatus(data.msg || '节点标题保存失败', true); return; }
+    nodes = nodes.map(n => ({...n, activity_name: map[n.activity_id] || n.activity_name || ''}));
+    renderNodeTitles();
+    renderRows();
+    setStatus(data.msg || '节点标题保存成功');
+  }
+
+  function renderRows(){
+    if (!signatureFields.length){
+      body.innerHTML = '<tr><td colspan="6" class="text-center py-10 text-slate-500">暂无签名控件，请先拉取</td></tr>';
+      return;
+    }
+    body.innerHTML = '';
+    signatureFields.forEach(f => {
+      const binding = currentBindings[f.field_id] || { field_id: f.field_id, field_name: f.field_name, field_type: 'SignatureField', source_type: 'form_field' };
+      const tr = document.createElement('tr');
+      tr.className = 'border-b border-slate-200/10 dark:border-slate-700/30';
+      const sourceType = document.createElement('select');
+      sourceType.className = 'w-full glass rounded-xl px-2 py-2 text-xs outline-none';
+      sourceType.innerHTML = '<option value="form_field">表单字段（推荐）</option><option value="approval_node">审批节点</option>';
+      sourceType.value = binding.source_type || 'form_field';
+
+      const sourceSelect = document.createElement('select');
+      sourceSelect.className = 'w-full glass rounded-xl px-2 py-2 text-xs outline-none';
+      sourceSelect.innerHTML = '<option value="">-- 选择来源 --</option>';
+      const options = sourceOptionsFor(f).filter(o => o.kind === sourceType.value);
+      options.forEach(o => {
+        const opt = document.createElement('option');
+        opt.value = o.id;
+        opt.textContent = o.label;
+        opt.dataset.name = o.name || '';
+        opt.dataset.type = o.type || '';
+        opt.dataset.preview = o.preview || '';
+        if ((sourceType.value === 'form_field' && String(binding.source_field_id || '') === String(o.id)) ||
+            (sourceType.value === 'approval_node' && String(binding.activity_id || '') === String(o.id))) opt.selected = true;
+        sourceSelect.appendChild(opt);
+      });
+      const preview = sourceSelect.selectedOptions[0]?.dataset.preview || binding.value_preview || '';
+      tr.innerHTML = `
+        <td class="py-3 px-2 font-black">${f.field_name || '-'}</td>
+        <td class="py-3 px-2 font-mono text-xs">${f.field_id || '-'}</td>
+        <td class="py-3 px-2"></td>
+        <td class="py-3 px-2"></td>
+        <td class="py-3 px-2 text-xs">${preview || '-'}</td>
+        <td class="py-3 px-2 text-center text-xs">${bindingStatus(binding)}</td>`;
+      tr.children[2].appendChild(sourceType);
+      tr.children[3].appendChild(sourceSelect);
+
+      function saveRow(){
+        const selected = sourceSelect.selectedOptions[0];
+        const sourceId = sourceSelect.value || '';
+        const sourceName = selected ? selected.dataset.name || '' : '';
+        const sourceFieldType = selected ? selected.dataset.type || '' : '';
+        const next = { field_id: f.field_id, field_name: f.field_name, field_type: 'SignatureField', source_type: sourceType.value };
+        if (sourceType.value === 'form_field') {
+          next.source_field_id = sourceId;
+          next.source_field_name = sourceName;
+          next.source_field_type = sourceFieldType;
+        } else {
+          next.activity_id = sourceId;
+          next.activity_name = sourceName;
+        }
+        currentBindings[f.field_id] = next;
+      }
+      sourceType.addEventListener('change', () => { saveRow(); renderRows(); });
+      sourceSelect.addEventListener('change', () => { saveRow(); renderRows(); });
+      body.appendChild(tr);
+    });
+  }
+
+  async function loadProcesses(){
+    const res = await fetch('/api/signature_bindings/processes');
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.msg || '流程加载失败');
+    processes = data.processes || [];
+    processSelect.innerHTML = '<option value="">-- 选择流程 --</option>';
+    processes.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.process_code;
+      opt.textContent = `${p.name || p.process_code} · ${p.process_code}`;
+      processSelect.appendChild(opt);
+    });
+  }
+
+  async function loadUsers(){
+    const res = await fetch('/api/signature_bindings/users');
+    const data = await res.json();
+    if (data.ok) localUsers = data.users || [];
+  }
+
+  async function loadBinding(){
+    const code = processSelect.value;
+    currentBindings = {};
+    if (!code) return;
+    const res = await fetch(`/api/signature_bindings/get?process_code=${encodeURIComponent(code)}`);
+    const data = await res.json();
+    if (data.ok && data.item && data.item.bindings) currentBindings = data.item.bindings;
+  }
+
+  function autoBindMissing(){
+    signatureFields.forEach(f => {
+      if (currentBindings[f.field_id] && (currentBindings[f.field_id].source_field_id || currentBindings[f.field_id].activity_id)) return;
+      const sigKey = normalizeDeptKey(f.field_name);
+      const hit = sourceFields.find(sf => sigKey && normalizeDeptKey(sf.field_name).includes(sigKey) && String(sf.field_type || '').includes('Contact')) ||
+        sourceFields.find(sf => sigKey && normalizeDeptKey(sf.field_name).includes(sigKey));
+      currentBindings[f.field_id] = {
+        field_id: f.field_id,
+        field_name: f.field_name,
+        field_type: 'SignatureField',
+        source_type: 'form_field',
+        source_field_id: hit ? hit.field_id : '',
+        source_field_name: hit ? hit.field_name : '',
+        source_field_type: hit ? hit.field_type : ''
+      };
+    });
+  }
+
+  async function loadFields(){
+    const code = processSelect.value;
+    if (!code){ alert('请先选择流程'); return; }
+    setStatus('正在拉取签名控件、表单字段和审批节点...');
+    await loadBinding();
+    const payload = { process_code: code, instance_id: instanceIdEl.value || '' };
+    const res = await fetch('/api/signature_bindings/fields', { method: 'POST', headers: {'content-type':'application/json'}, body: JSON.stringify(payload) });
+    const data = await res.json();
+    if (!data.ok){ setStatus(data.msg || '拉取失败', true); return; }
+    signatureFields = data.fields || [];
+    sourceFields = data.source_fields || [];
+    nodes = data.nodes || [];
+    autoBindMissing();
+    renderNodeTitles();
+    renderRows();
+    setStatus(`已从实例 ${data.instance_id || '-'} 拉取 ${signatureFields.length} 个签名控件、${sourceFields.length} 个表单来源字段、${nodes.length} 个审批节点`);
+  }
+
+  async function saveBindings(){
+    const code = processSelect.value;
+    if (!code){ alert('请先选择流程'); return; }
+    const proc = processes.find(p => p.process_code === code) || {};
+    const payload = { process_code: code, process_name: proc.name || code, bindings: currentBindings };
+    const res = await fetch('/api/signature_bindings/save', { method: 'POST', headers: {'content-type':'application/json'}, body: JSON.stringify(payload) });
+    const data = await res.json();
+    if (!data.ok){ setStatus(data.msg || '保存失败', true); return; }
+    setStatus(data.msg || '保存成功');
+  }
+
+  processSelect.addEventListener('change', async () => {
+    signatureFields = [];
+    sourceFields = [];
+    nodes = [];
+    await loadBinding();
+    renderNodeTitles();
+    renderRows();
+  });
+  sourceSearch.addEventListener('input', renderRows);
+  loadFieldsBtn.addEventListener('click', loadFields);
+  saveBtn.addEventListener('click', saveBindings);
+  saveNodeTitleBtn?.addEventListener('click', saveNodeTitles);
+
+  Promise.all([loadProcesses(), loadUsers()])
+    .then(() => setStatus('请选择流程并拉取控件/节点'))
+    .catch(err => setStatus(err.message || String(err), true));
+})();
+</script>
+{% endblock %}

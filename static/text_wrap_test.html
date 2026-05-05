@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>文本换行测试</title>
+    <style>
+        .test-box {
+            width: 120px;
+            height: 50px;
+            border: 2px solid #4f46e5;
+            padding: 4px;
+            margin: 20px;
+            background: rgba(79,70,229,.08);
+            box-sizing: border-box;
+            max-width: 100%;
+            word-wrap: break-word;
+        }
+        
+        .no-wrap {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        .with-wrap {
+            white-space: pre-wrap;
+            word-break: break-all;
+            overflow-wrap: break-word;
+            overflow: hidden;
+        }
+    </style>
+</head>
+<body>
+    <h1>文本换行测试</h1>
+    
+    <h2>不换行（默认）</h2>
+    <div class="test-box no-wrap" style="font-size: 10px;">
+        集团质量部一部 计划部 物资管理部兴汇科技
+    </div>
+    <div class="test-box no-wrap" style="font-size: 14px;">
+        集团质量部一部 计划部 物资管理部兴汇科技
+    </div>
+    
+    <h2>启用换行</h2>
+    <div class="test-box with-wrap" style="font-size: 10px;">
+        集团质量部一部 计划部 物资管理部兴汇科技
+    </div>
+    <div class="test-box with-wrap" style="font-size: 14px;">
+        集团质量部一部 计划部 物资管理部兴汇科技
+    </div>
+    
+    <h2>说明</h2>
+    <ul>
+        <li>不换行：文本超出宽度时显示省略号</li>
+        <li>启用换行：文本在固定宽度内自动换行</li>
+        <li>增大字号后，换行模式下文本仍在固定宽度内</li>
+    </ul>
+</body>
+</html>
