@@ -54,7 +54,6 @@ class AppConfig:
     base_dir: Path
     pdf_template_dir: Path
     output_dir: Path
-    process_config_file: Path
     process_history_file: Path
 
     # HTTP

@@ -759,5 +759,17 @@
         "y": 50
       }
     ]
-  }
+  },
+  "pdf_templates": [
+    {
+      "name": "空白模板（横向）",
+      "filename": "blank_landscape.pdf",
+      "description": "A4 横向空白模板，适合附件底图模式"
+    },
+    {
+      "name": "空白模板（纵向）",
+      "filename": "blank_portrait.pdf",
+      "description": "A4 纵向空白模板，适合附件底图模式"
+    }
+  ]
 }
