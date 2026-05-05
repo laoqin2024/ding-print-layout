@@ -1,0 +1,34 @@
+{
+  "name": "frontend",
+  "version": "1.0.0",
+  "description": "This project now follows a clearer frontend layering model while still running in Flask templates.",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0 --port 5173",
+    "build": "vite build && npm run build:legacy",
+    "build:legacy": "esbuild src/js/core.js --bundle --format=iife --platform=browser --target=es2017 --outfile=../static/dist-legacy/core.js && esbuild src/js/portal.js --bundle --format=iife --platform=browser --target=es2017 --outfile=../static/dist-legacy/portal.js && esbuild src/js/admin_list.js --bundle --format=iife --platform=browser --target=es2017 --outfile=../static/dist-legacy/admin_list.js && esbuild src/js/admin_edit.js --bundle --format=iife --platform=browser --target=es2017 --outfile=../static/dist-legacy/admin_edit.js && esbuild src/js/admin_node_edit.js --bundle --format=iife --platform=browser --target=es2017 --outfile=../static/dist-legacy/admin_node_edit.js && esbuild src/js/print.js --bundle --format=iife --platform=browser --target=es2017 --outfile=../static/dist-legacy/print.js",
+    "preview": "vite preview --host 0.0.0.0 --port 4173",
+    "lint": "eslint \"src/js/**/*.js\"",
+    "format": "prettier --write \"src/**/*.{js,css}\""
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "autoprefixer": "^10.5.0",
+    "esbuild": "^0.28.0",
+    "eslint": "^9.39.4",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-import": "^2.32.0",
+    "globals": "^17.5.0",
+    "postcss": "^8.5.12",
+    "prettier": "^3.8.3",
+    "tailwindcss": "^3.4.17",
+    "vite": "^5.4.19"
+  },
+  "dependencies": {
+    "jquery": "^3.7.1",
+    "pdfjs-dist": "^3.11.174",
+    "select2": "^4.1.0-rc.0"
+  }
+}

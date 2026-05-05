@@ -1,0 +1,157 @@
+================================================================================
+FILE: frontend/src/js/print.js
+DESCRIPTION: Frontend JavaScript for print preview page with DingTalk dd.config
+================================================================================
+
+import { GlobalWorkerOptions, getDocument } from "pdfjs-dist/legacy/build/pdf";
+import workerSrc from "pdfjs-dist/legacy/build/pdf.worker?url";
+
+GlobalWorkerOptions.workerSrc = workerSrc;
+
+(function () {
+  const boot = window.PRINT_BOOT || {};
+
+  const els = {
+    backBtn: document.getElementById("back-btn"),
+    meta: document.getElementById("meta"),
+    pageLabel: document.getElementById("page-label"),
+    checkPanel: document.getElementById("check-panel"),
+    checkSubtitle: document.getElementById("check-subtitle"),
+    checkState: document.getElementById("check-state"),
+    chkSignTotal: document.getElementById("chk-sign-total"),
+    chkZoneTotal: document.getElementById("chk-zone-total"),
+    chkMatchCount: document.getElementById("chk-match-count"),
+    chkInsertedCount: document.getElementById("chk-inserted-count"),
+    checkWarn: document.getElementById("check-warn"),
+    pages: document.getElementById("pdf-pages"),
+    error: document.getElementById("pdf-error"),
+    printFab: document.getElementById("print-fab"),
+  };
+
+  function renderCheckPanel() {
+    const report = boot.checkReport || {};
+    if (!els.checkPanel) return;
+
+    const signTotal = Number(report.signature_total || 0);
+    const zoneTotal = Number(report.zone_total || 0);
+    const matchCount = Number(report.matched_relation_count || 0);
+    const insertedCount = Number(report.inserted_count || 0);
+    const unmatched = Array.isArray(report.unmatched_signature_names)
+      ? report.unmatched_signature_names
+      : [];
+
+    els.chkSignTotal.textContent = String(signTotal);
+    els.chkZoneTotal.textContent = String(zoneTotal);
+    els.chkMatchCount.textContent = String(matchCount);
+    els.chkInsertedCount.textContent = String(insertedCount);
+
+    if (els.checkSubtitle) {
+      els.checkSubtitle.textContent = `${boot.processName || "当前流程"} · 打印前建议先检查命中情况`;
+    }
+
+    const healthy = signTotal === 0 ? false : unmatched.length === 0 && insertedCount > 0;
+    if (els.checkState) {
+      els.checkState.className = healthy
+        ? "text-[11px] font-black px-3 py-1.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25"
+        : "text-[11px] font-black px-3 py-1.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/25";
+      els.checkState.textContent = healthy ? "可打印" : "请复核";
+    }
+
+    if (els.checkWarn) {
+      if (signTotal === 0) {
+        els.checkWarn.classList.remove("hidden");
+        els.checkWarn.textContent = "未识别到签名/附件，打印结果可能为空白盖章。";
+      } else if (unmatched.length > 0) {
+        els.checkWarn.classList.remove("hidden");
+        els.checkWarn.textContent = `以下签名未命中区域：${unmatched.join("、")}`;
+      } else if (insertedCount === 0) {
+        els.checkWarn.classList.remove("hidden");
+        els.checkWarn.textContent = "检测到匹配关系，但未成功插入图片，请检查签名URL或坐标配置。";
+      } else {
+        els.checkWarn.classList.add("hidden");
+        els.checkWarn.textContent = "";
+      }
+    }
+
+    els.checkPanel.classList.remove("hidden");
+  }
+
+  function formatBytes(bytes) {
+    const n = Number(bytes || 0);
+    if (!Number.isFinite(n) || n <= 0) return "";
+    if (n < 1024) return `${n} B`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+    return `${(n / (1024 * 1024)).toFixed(2)} MB`;
+  }
+
+  async function renderPdf(pdfUrl) {
+    const loadingTask = getDocument({ url: pdfUrl, withCredentials: false });
+    const pdf = await loadingTask.promise;
+    els.pageLabel.textContent = `1 / ${pdf.numPages}`;
+    const parts = [`共 ${pdf.numPages} 页`];
+    if (boot.instanceId) parts.push(String(boot.instanceId));
+    if (boot.pdfName) parts.push(String(boot.pdfName));
+    const sizeText = formatBytes(boot.pdfBytes);
+    if (sizeText) parts.push(sizeText);
+    if (boot.pdfV) parts.push(`v=${boot.pdfV}`);
+    els.meta.textContent = parts.join(" · ");
+    els.pages.innerHTML = "";
+    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+      const page = await pdf.getPage(pageNum);
+      const viewport = page.getViewport({ scale: 1.35 });
+      const wrap = document.createElement("div");
+      wrap.className = "glass rounded-3xl p-4 sm:p-6";
+      const header = document.createElement("div");
+      header.className = "no-print flex items-center justify-between mb-3";
+      header.innerHTML = `<div class="text-[11px] font-black text-slate-600 dark:text-slate-300">第 ${pageNum} 页</div>
+        <div class="text-[10px] text-slate-500 dark:text-slate-400">72DPI 坐标预览</div>`;
+      wrap.appendChild(header);
+      const canvas = document.createElement("canvas");
+      canvas.className = "w-full h-auto rounded-2xl bg-white";
+      const ctx = canvas.getContext("2d", { alpha: false });
+      canvas.width = Math.floor(viewport.width);
+      canvas.height = Math.floor(viewport.height);
+      wrap.appendChild(canvas);
+      els.pages.appendChild(wrap);
+      await page.render({ canvasContext: ctx, viewport }).promise;
+      if (pageNum === pdf.numPages) els.pageLabel.textContent = `${pdf.numPages} / ${pdf.numPages}`;
+    }
+  }
+
+  async function doPrint() {
+    const url = boot.pdfUrl;
+    try {
+      if (window.dd && dd.ready && dd.biz && dd.biz.util && typeof dd.biz.util.print === "function") {
+        dd.ready(function () {
+          try {
+            dd.biz.util.print({
+              url,
+              onSuccess: function () {},
+              onFail: function () {
+                window.print();
+              },
+            });
+          } catch {
+            window.print();
+          }
+        });
+        return;
+      }
+    } catch {
+      // fallback handled below
+    }
+    window.print();
+  }
+
+  window.AppCore.onReady(async function () {
+    els.backBtn?.addEventListener("click", () => history.back());
+    els.printFab?.addEventListener("click", doPrint);
+    renderCheckPanel();
+    try {
+      await renderPdf(boot.pdfUrl);
+    } catch {
+      if (els.meta) els.meta.textContent = "PDF 渲染失败";
+      els.error?.classList.remove("hidden");
+    }
+  });
+})();
