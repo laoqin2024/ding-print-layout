@@ -215,7 +215,8 @@ def api_templates_list():
         if layouts_path.exists():
             data = json.loads(layouts_path.read_text(encoding="utf-8"))
             if isinstance(data, dict):
-                designer_layouts = data
+                # 只获取流程配置，排除 pdf_templates
+                designer_layouts = {k: v for k, v in data.items() if k.startswith("PROC-")}
         
         templates = []
         for p_code, layout in designer_layouts.items():
