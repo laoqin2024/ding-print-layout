@@ -122,8 +122,7 @@ def load_config() -> AppConfig:
     # 使用安全解析函数处理路径，防止服务器硬编码路径干扰
     pdf_template_dir = _resolve_path("PDF_TEMPLATE_DIR", base_dir / "templates" / "pdf_templates")
     output_dir = _resolve_path("OUTPUT_DIR", base_dir / "static" / "outputs")
-    process_config_file = _resolve_path("PROCESS_CONFIG_FILE", base_dir / "data" / "process_configs.json")
-    process_history_file = _resolve_path("PROCESS_HISTORY_FILE", base_dir / "data" / "process_configs.history.json")
+    process_history_file = _resolve_path("PROCESS_HISTORY_FILE", base_dir / "data" / "process_versions.json")
 
     return AppConfig(
         app_key=app_key,
@@ -133,7 +132,6 @@ def load_config() -> AppConfig:
         base_dir=base_dir,
         pdf_template_dir=pdf_template_dir,
         output_dir=output_dir,
-        process_config_file=process_config_file,
         process_history_file=process_history_file,
         request_timeout_seconds=float(_env("REQUEST_TIMEOUT_SECONDS", "10") or "10"),
         oapi_base=_env("DINGTALK_OAPI_BASE", "https://oapi.dingtalk.com") or "https://oapi.dingtalk.com",
