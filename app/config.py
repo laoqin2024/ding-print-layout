@@ -78,11 +78,8 @@ class Config:
         try:
             cfg.pdf_template_dir.mkdir(parents=True, exist_ok=True)
             cfg.output_dir.mkdir(parents=True, exist_ok=True)
-            cfg.process_config_file.parent.mkdir(parents=True, exist_ok=True)
             cfg.process_history_file.parent.mkdir(parents=True, exist_ok=True)
 
-            if not cfg.process_config_file.exists():
-                cfg.process_config_file.write_text(json.dumps({}, ensure_ascii=False, indent=4), encoding="utf-8")
             if not cfg.process_history_file.exists():
                 cfg.process_history_file.write_text(json.dumps([], ensure_ascii=False, indent=4), encoding="utf-8")
         except PermissionError:
