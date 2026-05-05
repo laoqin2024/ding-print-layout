@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>权限管理 - 钉钉审批打印系统</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='dist/app.css') }}">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            position: relative;
+            background: #f8fafc;
+        }
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            z-index: -1;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            position: relative;
+            z-index: 1;
+        }
+        .header {
+            background: white;
+            border-radius: 20px;
+            padding: 30px 40px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+        }
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        .stat-card {
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+        }
+        .stat-label {
+            font-size: 14px;
+            color: #64748b;
+            margin-bottom: 10px;
+            font-weight: 500;
+        }
+        .stat-value {
+            font-size: 36px;
+            font-weight: 800;
+            color: #1e293b;
+        }
+        .stat-icon {
+            font-size: 40px;
+            margin-bottom: 15px;
+        }
+        .cards-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 25px;
+        }
+        .feature-card {
+            background: white;
+            border-radius: 20px;
+            padding: 35px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            transition: all 0.3s ease;
+            cursor: pointer;
+            text-decoration: none;
+            color: inherit;
+            display: block;
+        }
+        .feature-card:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 12px 40px rgba(0,0,0,0.15);
+        }
+        .feature-icon {
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+        .feature-title {
+            font-size: 22px;
+            font-weight: 800;
+            color: #1e293b;
+            margin-bottom: 12px;
+        }
+        .feature-desc {
+            font-size: 14px;
+            color: #64748b;
+            line-height: 1.6;
+        }
+        .back-btn {
+            background: white;
+            color: #667eea;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .back-btn:hover {
+            background: #f8f9fa;
+            transform: translateX(-5px);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 头部 -->
+        <div class="header">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <h1 style="font-size: 32px; font-weight: 800; color: #1e293b; margin: 0 0 10px 0;">
+                        🔐 权限管理中心
+                    </h1>
+                    <p style="color: #64748b; margin: 0; font-size: 16px;">
+                        管理系统权限和用户访问控制
+                    </p>
+                </div>
+                <a href="/admin" class="back-btn">
+                    ← 返回管理后台
+                </a>
+            </div>
+        </div>
+
+        <!-- 统计卡片 -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-icon">👥</div>
+                <div class="stat-label">用户总数</div>
+                <div class="stat-value" id="stat-users">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">🏢</div>
+                <div class="stat-label">部门总数</div>
+                <div class="stat-value" id="stat-departments">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">👔</div>
+                <div class="stat-label">部门主管</div>
+                <div class="stat-value" id="stat-managers">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">👑</div>
+                <div class="stat-label">系统管理员</div>
+                <div class="stat-value" id="stat-admins">-</div>
+            </div>
+        </div>
+
+        <!-- 功能卡片 -->
+        <div class="cards-grid">
+            <a href="/admin/permissions/admins" class="feature-card">
+                <div class="feature-icon">👑</div>
+                <div class="feature-title">系统管理员</div>
+                <div class="feature-desc">
+                    配置系统管理员，管理员可以查看所有审批和配置权限。支持搜索用户并快速授权。
+                </div>
+            </a>
+
+            <a href="/admin/permissions/templates" class="feature-card">
+                <div class="feature-icon">📋</div>
+                <div class="feature-title">模板权限</div>
+                <div class="feature-desc">
+                    配置模板的可见范围、提交权限和查看权限。支持按部门或用户精细化控制。
+                </div>
+            </a>
+
+            <a href="/admin/permissions/managers" class="feature-card">
+                <div class="feature-icon">👥</div>
+                <div class="feature-title">部门主管</div>
+                <div class="feature-desc">
+                    查看所有部门主管，主管可以查看本部门成员的审批。数据从钉钉自动同步。
+                </div>
+            </a>
+
+            <div class="feature-card" style="cursor: default; opacity: 0.7;">
+                <div class="feature-icon">📖</div>
+                <div class="feature-title">权限规则</div>
+                <div class="feature-desc">
+                    ✅ 用户只能看自己的审批<br>
+                    ✅ 部门主管可看本部门审批<br>
+                    ✅ 系统管理员可看所有审批
+                </div>
+            </div>
+
+            <div class="feature-card" style="cursor: default; opacity: 0.7;">
+                <div class="feature-icon">🔄</div>
+                <div class="feature-title">数据同步</div>
+                <div class="feature-desc">
+                    最后同步: <strong id="last-sync">-</strong><br>
+                    <button onclick="alert('同步功能开发中')" style="margin-top: 15px; background: #667eea; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: 600;">
+                        立即同步
+                    </button>
+                </div>
+            </div>
+
+            <div class="feature-card" style="cursor: default; opacity: 0.7;">
+                <div class="feature-icon">❓</div>
+                <div class="feature-title">帮助文档</div>
+                <div class="feature-desc">
+                    查看权限配置说明和常见问题解答。了解如何正确配置和使用权限系统。
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 加载统计信息
+        async function loadStats() {
+            try {
+                const resp = await fetch('/admin/permissions/api/stats');
+                const data = await resp.json();
+                
+                if (data.errcode === 0) {
+                    document.getElementById('stat-users').textContent = data.data.total_users.toLocaleString();
+                    document.getElementById('stat-departments').textContent = data.data.total_departments.toLocaleString();
+                    document.getElementById('stat-managers').textContent = data.data.total_managers.toLocaleString();
+                    document.getElementById('stat-admins').textContent = data.data.total_admins.toLocaleString();
+                    document.getElementById('last-sync').textContent = data.data.last_sync || '未知';
+                }
+            } catch (err) {
+                console.error('加载统计信息失败:', err);
+            }
+        }
+
+        // 页面加载时执行
+        loadStats();
+    </script>
+</body>
+</html>

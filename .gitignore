@@ -4,7 +4,6 @@
 .env
 .env.local
 .env.*.local
-.env。1
 
 # ===============================
 # Python
@@ -37,6 +36,7 @@ MANIFEST
 # 虚拟环境
 # ===============================
 venv/
+dingvenv/
 ENV/
 env/
 .venv
@@ -68,9 +68,16 @@ data/process_versions.json
 
 # 用户数据
 data/users.json
+data/users.json.backup
+
+# 权限配置
+data/business_permissions.json
 
 # 签名绑定数据
 data/signature_bindings.json
+
+# 钉钉缓存
+data/dingtalk_cache.json
 
 # 日志文件
 *.log
@@ -89,6 +96,7 @@ logs/
 htmlcov/
 .tox/
 .nox/
+tests/
 
 # ===============================
 # 数据库
@@ -112,12 +120,22 @@ Thumbs.db
 desktop.ini
 
 # ===============================
-# 开发文档（可选）
-# ===============================
-# 如果不想提交开发过程文档，取消下面的注释
-# docs/
-
-# ===============================
 # 开发文档（不提交）
 # ===============================
-docs/development/
+docs/
+*.md.backup
+
+# ===============================
+# 前端构建产物（如果有）
+# ===============================
+node_modules/
+npm-debug.log
+yarn-error.log
+package-lock.json
+yarn.lock
+
+# ===============================
+# Cursor 相关
+# ===============================
+.cursor/
+

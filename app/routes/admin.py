@@ -117,30 +117,15 @@ def _run_health_checks():
 
 @admin_bp.route("/admin")
 def admin_list():
-    cfg = _cfg()
-    config = load_process_configs(cfg)
-    return render_template("admin_list.html", config=config)
+    """管理中心首页 - 只显示功能入口，不显示模板列表"""
+    return render_template("admin_list.html")
 
 
 @admin_bp.route("/admin/delete/<path:code>")
 def admin_delete(code: str):
-    cfg = _cfg()
-    config = load_process_configs(cfg)
-    target_code = DingTalkService.normalize_code(code)
-    if target_code in config:
-        previous = config.get(target_code)
-        del config[target_code]
-        save_process_configs(cfg, config)
-        append_process_version(
-            cfg=cfg,
-            process_code=target_code,
-            action="delete",
-            previous=previous,
-            current=None,
-            operator=request.remote_addr or "admin",
-        )
-        flash(f"已删除流程: {target_code}")
-    return redirect(url_for("admin_bp.admin_list"))
+    """删除功能已迁移到设计器"""
+    flash("删除功能已迁移到排版设计器，请在设计器中进行操作")
+    return redirect(url_for("designer_bp.designer_list"))
 
 
 @admin_bp.route("/admin/edit")

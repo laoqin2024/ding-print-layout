@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>部门主管查看 - 权限管理</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='dist/app.css') }}">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            position: relative;
+            background: #f8fafc;
+        }
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            z-index: -1;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            position: relative;
+            z-index: 1;
+        }
+        .header {
+            background: white;
+            border-radius: 20px;
+            padding: 30px 40px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+        }
+        .stats-bar {
+            background: white;
+            border-radius: 16px;
+            padding: 20px 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .panel {
+            background: white;
+            border-radius: 20px;
+            padding: 35px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+        }
+        .manager-item {
+            padding: 25px;
+            background: #f8fafc;
+            border-radius: 16px;
+            margin-bottom: 16px;
+            transition: all 0.3s ease;
+        }
+        .manager-item:hover {
+            background: #f1f5f9;
+            transform: translateX(5px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        }
+        .manager-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 15px;
+        }
+        .manager-name {
+            font-size: 20px;
+            font-weight: 800;
+            color: #1e293b;
+            margin-bottom: 6px;
+        }
+        .manager-dept {
+            font-size: 14px;
+            color: #64748b;
+        }
+        .badge {
+            padding: 6px 16px;
+            background: #10b981;
+            color: white;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 700;
+        }
+        .dept-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .dept-tag {
+            padding: 8px 16px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 10px;
+            font-size: 13px;
+            font-weight: 700;
+        }
+        .back-btn {
+            background: white;
+            color: #667eea;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .back-btn:hover {
+            background: #f8f9fa;
+            transform: translateX(-5px);
+        }
+        .loading {
+            text-align: center;
+            padding: 80px 20px;
+            color: #94a3b8;
+            font-size: 16px;
+        }
+        .managers-container {
+            max-height: 700px;
+            overflow-y: auto;
+            overscroll-behavior: contain;
+        }
+        .managers-container::-webkit-scrollbar {
+            width: 10px;
+        }
+        .managers-container::-webkit-scrollbar-track {
+            background: #f1f5f9;
+            border-radius: 5px;
+        }
+        .managers-container::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 5px;
+        }
+        .managers-container::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 头部 -->
+        <div class="header">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <h1 style="font-size: 32px; font-weight: 800; color: #1e293b; margin: 0 0 10px 0;">
+                        👥 部门主管
+                    </h1>
+                    <p style="color: #64748b; margin: 0; font-size: 16px;">
+                        部门主管可以查看本部门成员的审批（从钉钉自动同步）
+                    </p>
+                </div>
+                <a href="/admin/permissions" class="back-btn">
+                    ← 返回
+                </a>
+            </div>
+        </div>
+
+        <!-- 统计信息 -->
+        <div class="stats-bar">
+            <div style="color: #64748b; font-size: 15px;">
+                共 <span id="total-managers" style="font-weight: 800; color: #1e293b; font-size: 24px;">0</span> 个部门主管
+            </div>
+            <div style="font-size: 13px; color: #94a3b8;">
+                💡 部门主管信息从钉钉自动同步，无需手动配置
+            </div>
+        </div>
+
+        <!-- 主管列表 -->
+        <div class="panel">
+            <div id="managers-list" class="managers-container"></div>
+            <div id="loading" class="loading">
+                <div style="font-size: 48px; margin-bottom: 15px;">⏳</div>
+                <div>加载中...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 加载部门主管列表
+        async function loadManagers() {
+            try {
+                const resp = await fetch('/admin/permissions/api/managers/list');
+                const data = await resp.json();
+                
+                document.getElementById('loading').style.display = 'none';
+                
+                if (data.errcode === 0) {
+                    const container = document.getElementById('managers-list');
+                    document.getElementById('total-managers').textContent = data.data.length;
+                    
+                    if (data.data.length === 0) {
+                        container.innerHTML = '<div class="loading"><div style="font-size: 48px; margin-bottom: 15px;">👥</div><div>暂无部门主管</div></div>';
+                        return;
+                    }
+                    
+                    container.innerHTML = data.data.map(manager => `
+                        <div class="manager-item">
+                            <div class="manager-header">
+                                <div style="flex: 1;">
+                                    <div class="manager-name">${manager.name}</div>
+                                    <div class="manager-dept">所属部门: ${manager.dept_name}</div>
+                                </div>
+                                <div class="badge">主管</div>
+                            </div>
+                            ${manager.managed_depts.length > 0 ? `
+                                <div class="dept-tags">
+                                    ${manager.managed_depts.map(dept => `
+                                        <span class="dept-tag">${dept}</span>
+                                    `).join('')}
+                                </div>
+                            ` : ''}
+                        </div>
+                    `).join('');
+                }
+            } catch (err) {
+                console.error('加载部门主管列表失败:', err);
+                document.getElementById('loading').innerHTML = '<div class="loading"><div style="font-size: 48px; margin-bottom: 15px; color: #ef4444;">❌</div><div style="color: #ef4444;">加载失败</div></div>';
+            }
+        }
+        
+        // 页面加载时执行
+        loadManagers();
+    </script>
+</body>
+</html>

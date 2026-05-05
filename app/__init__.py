@@ -29,12 +29,28 @@ def create_app() -> Flask:
     from app.routes.admin import admin_bp
     from app.routes.designer import designer_bp
     from app.routes.users import users_bp
+    from app.routes.permissions import permissions_bp
 
     app.register_blueprint(portal_bp)
     app.register_blueprint(print_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(designer_bp)
     app.register_blueprint(users_bp)
+    app.register_blueprint(permissions_bp)
+
+    # Disable caching for development
+    @app.after_request
+    def add_no_cache_headers(response):
+        """Add headers to prevent caching during development"""
+        # For HTML pages and API responses, disable caching
+        if response.content_type and ('text/html' in response.content_type or 'application/json' in response.content_type):
+            response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+            response.headers['Pragma'] = 'no-cache'
+            response.headers['Expires'] = '0'
+        # For static files (CSS, JS), use short cache with version parameter
+        elif response.content_type and ('text/css' in response.content_type or 'javascript' in response.content_type):
+            response.headers['Cache-Control'] = 'public, max-age=300'  # 5 minutes
+        return response
 
     @app.context_processor
     def inject_asset_version():

@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>系统管理员配置 - 权限管理</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='dist/app.css') }}">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            position: relative;
+            background: #f8fafc;
+        }
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            z-index: -1;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            position: relative;
+            z-index: 1;
+        }
+        .header {
+            background: white;
+            border-radius: 20px;
+            padding: 30px 40px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+        }
+        .content-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+        }
+        .panel {
+            background: white;
+            border-radius: 20px;
+            padding: 35px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+        }
+        .panel-title {
+            font-size: 22px;
+            font-weight: 800;
+            color: #1e293b;
+            margin-bottom: 25px;
+        }
+        .search-input {
+            width: 100%;
+            padding: 14px 18px;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            font-size: 15px;
+            transition: all 0.3s ease;
+        }
+        .search-input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        .user-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 18px;
+            background: #f8fafc;
+            border-radius: 12px;
+            margin-bottom: 12px;
+            transition: all 0.3s ease;
+        }
+        .user-item:hover {
+            background: #f1f5f9;
+            transform: translateX(5px);
+        }
+        .user-info {
+            flex: 1;
+        }
+        .user-name {
+            font-size: 16px;
+            font-weight: 700;
+            color: #1e293b;
+            margin-bottom: 4px;
+        }
+        .user-meta {
+            font-size: 13px;
+            color: #64748b;
+        }
+        .btn {
+            padding: 10px 24px;
+            border: none;
+            border-radius: 10px;
+            font-weight: 700;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .btn-add {
+            background: #667eea;
+            color: white;
+        }
+        .btn-add:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+        .btn-remove {
+            background: #ef4444;
+            color: white;
+        }
+        .btn-remove:hover {
+            background: #dc2626;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+        }
+        .back-btn {
+            background: white;
+            color: #667eea;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .back-btn:hover {
+            background: #f8f9fa;
+            transform: translateX(-5px);
+        }
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #94a3b8;
+        }
+        .results-container {
+            max-height: 500px;
+            overflow-y: auto;
+            overscroll-behavior: contain;
+        }
+        .results-container::-webkit-scrollbar {
+            width: 8px;
+        }
+        .results-container::-webkit-scrollbar-track {
+            background: #f1f5f9;
+            border-radius: 4px;
+        }
+        .results-container::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        .results-container::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 头部 -->
+        <div class="header">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <h1 style="font-size: 32px; font-weight: 800; color: #1e293b; margin: 0 0 10px 0;">
+                        👑 系统管理员配置
+                    </h1>
+                    <p style="color: #64748b; margin: 0; font-size: 16px;">
+                        管理员可以查看所有审批和配置权限
+                    </p>
+                </div>
+                <a href="/admin/permissions" class="back-btn">
+                    ← 返回
+                </a>
+            </div>
+        </div>
+
+        <!-- 内容区域 -->
+        <div class="content-grid">
+            <!-- 添加管理员 -->
+            <div class="panel">
+                <h2 class="panel-title">添加管理员</h2>
+                
+                <div style="margin-bottom: 20px;">
+                    <input type="text" id="search-input" placeholder="搜索用户（姓名或手机号）" class="search-input">
+                </div>
+                
+                <div id="search-results" class="results-container"></div>
+            </div>
+
+            <!-- 当前管理员列表 -->
+            <div class="panel">
+                <h2 class="panel-title">当前管理员</h2>
+                <div id="admins-list" class="results-container"></div>
+                <div id="no-admins" class="empty-state" style="display: none;">
+                    <div style="font-size: 48px; margin-bottom: 15px;">👑</div>
+                    <div style="font-size: 16px;">暂无系统管理员</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let searchTimeout;
+        
+        // 搜索用户
+        document.getElementById('search-input').addEventListener('input', (e) => {
+            clearTimeout(searchTimeout);
+            const keyword = e.target.value.trim();
+            
+            if (!keyword) {
+                document.getElementById('search-results').innerHTML = '';
+                return;
+            }
+            
+            searchTimeout = setTimeout(async () => {
+                try {
+                    const resp = await fetch(`/admin/permissions/api/users/search?keyword=${encodeURIComponent(keyword)}`);
+                    const data = await resp.json();
+                    
+                    if (data.errcode === 0) {
+                        displaySearchResults(data.data);
+                    }
+                } catch (err) {
+                    console.error('搜索失败:', err);
+                }
+            }, 300);
+        });
+        
+        // 显示搜索结果
+        function displaySearchResults(users) {
+            const container = document.getElementById('search-results');
+            
+            if (users.length === 0) {
+                container.innerHTML = '<div class="empty-state"><div style="font-size: 48px; margin-bottom: 15px;">🔍</div><div>未找到用户</div></div>';
+                return;
+            }
+            
+            container.innerHTML = users.map(user => `
+                <div class="user-item">
+                    <div class="user-info">
+                        <div class="user-name">${user.name}</div>
+                        <div class="user-meta">${user.dept_name} · ${user.mobile}</div>
+                    </div>
+                    <button onclick="addAdmin('${user.userid}')" class="btn btn-add">
+                        添加
+                    </button>
+                </div>
+            `).join('');
+        }
+        
+        // 添加管理员
+        async function addAdmin(userid) {
+            try {
+                const resp = await fetch('/admin/permissions/api/admins/add', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({userid})
+                });
+                const data = await resp.json();
+                
+                if (data.errcode === 0) {
+                    alert('✅ 添加成功');
+                    document.getElementById('search-input').value = '';
+                    document.getElementById('search-results').innerHTML = '';
+                    loadAdmins();
+                } else {
+                    alert('❌ ' + data.errmsg);
+                }
+            } catch (err) {
+                alert('❌ 添加失败: ' + err.message);
+            }
+        }
+        
+        // 移除管理员
+        async function removeAdmin(userid) {
+            if (!confirm('确定要移除该管理员吗？')) return;
+            
+            try {
+                const resp = await fetch('/admin/permissions/api/admins/remove', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({userid})
+                });
+                const data = await resp.json();
+                
+                if (data.errcode === 0) {
+                    alert('✅ 移除成功');
+                    loadAdmins();
+                } else {
+                    alert('❌ ' + data.errmsg);
+                }
+            } catch (err) {
+                alert('❌ 移除失败: ' + err.message);
+            }
+        }
+        
+        // 加载管理员列表
+        async function loadAdmins() {
+            try {
+                const resp = await fetch('/admin/permissions/api/admins/list');
+                const data = await resp.json();
+                
+                if (data.errcode === 0) {
+                    const container = document.getElementById('admins-list');
+                    const noAdmins = document.getElementById('no-admins');
+                    
+                    if (data.data.length === 0) {
+                        container.innerHTML = '';
+                        noAdmins.style.display = 'block';
+                    } else {
+                        noAdmins.style.display = 'none';
+                        container.innerHTML = data.data.map(admin => `
+                            <div class="user-item">
+                                <div class="user-info">
+                                    <div class="user-name">${admin.name}</div>
+                                    <div class="user-meta">${admin.dept_name} · ${admin.mobile}</div>
+                                </div>
+                                <button onclick="removeAdmin('${admin.userid}')" class="btn btn-remove">
+                                    移除
+                                </button>
+                            </div>
+                        `).join('');
+                    }
+                }
+            } catch (err) {
+                console.error('加载管理员列表失败:', err);
+            }
+        }
+        
+        // 页面加载时执行
+        loadAdmins();
+    </script>
+</body>
+</html>

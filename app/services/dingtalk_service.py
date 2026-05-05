@@ -164,6 +164,80 @@ class DingTalkService:
             raise DingTalkError(f"listids failed: {data}")
         return list(((data.get("result") or {}).get("list")) or [])
 
+    def list_all_process_instance_ids(
+        self,
+        process_code: str,
+        userid: str,
+        *,
+        start_time_ms: Optional[int] = None,
+        max_results: int = 1000,
+    ) -> List[str]:
+        """
+        获取所有审批实例 ID（自动处理分页）
+        
+        Args:
+            process_code: 流程代码
+            userid: 用户 ID
+            start_time_ms: 开始时间（毫秒时间戳）
+            max_results: 最大返回数量（防止无限循环）
+        
+        Returns:
+            所有审批实例 ID 列表
+        """
+        token = self.get_access_token()
+        p_code = DingTalkService.normalize_code(process_code)
+
+        if start_time_ms is None:
+            # 默认获取最近 120 天的数据
+            start_time_ms = int((time.time() - 120 * 24 * 3600) * 1000)
+
+        all_ids = []
+        cursor = 0
+        page_size = 20  # 每页获取 20 条
+        
+        while len(all_ids) < max_results:
+            payload = {
+                "process_code": p_code,
+                "start_time": start_time_ms,
+                "userid": userid,
+                "cursor": cursor,
+                "size": page_size,
+            }
+            
+            try:
+                resp = self.session.post(
+                    self._url("/topapi/processinstance/listids"),
+                    params={"access_token": token},
+                    json=payload,
+                    timeout=self.cfg.request_timeout_seconds,
+                )
+                data = resp.json()
+            except Exception as e:
+                raise DingTalkError(f"listids request failed: {e}") from e
+
+            if data.get("errcode") != 0:
+                raise DingTalkError(f"listids failed: {data}")
+            
+            result = data.get("result") or {}
+            ids = list(result.get("list") or [])
+            next_cursor = result.get("next_cursor", 0)
+            
+            if not ids:
+                # 没有更多数据了
+                break
+            
+            all_ids.extend(ids)
+            
+            # 检查是否还有下一页
+            if next_cursor == 0 or next_cursor <= cursor:
+                # 没有下一页了
+                break
+            
+            cursor = next_cursor
+        
+        # 限制最大返回数量
+        return all_ids[:max_results]
+
     def get_process_instance(self, process_instance_id: str) -> Dict[str, Any]:
         """
         Calls: POST /topapi/processinstance/get?access_token=...

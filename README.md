@@ -1,6 +1,6 @@
 # 钉钉打印排版系统
 
-一个基于 Flask 的钉钉审批流程打印排版系统，支持可视化设计器和 PDF 生成。
+一个基于 Flask 的钉钉审批流程打印排版系统，支持可视化设计器、权限管理和 PDF 生成。
 
 ## ✨ 功能特性
 
@@ -29,6 +29,13 @@
 - **撤销/重做**: 完整的操作历史记录
 - **网格对齐**: 辅助精确定位
 - **缩放功能**: 支持画布缩放查看
+
+### 🔐 权限管理系统
+- **系统管理员**: 配置系统管理员，管理员可查看所有审批
+- **部门主管**: 自动从钉钉同步，主管可查看本部门成员的审批
+- **模板权限**: 配置模板的可见范围（所有人/指定部门）
+- **查看权限**: 配置额外查看者（部门主管/指定用户）
+- **权限统计**: 实时显示用户、部门、主管数量
 
 ### 🔧 系统功能
 - **钉钉集成**: 与钉钉审批流程深度集成
@@ -114,11 +121,12 @@ python run.py
 4. 配置控件属性
 5. 保存模板
 
-### 绑定流程
+### 配置权限
 
-1. 在设计器中选择要绑定的流程
-2. 配置字段映射
-3. 保存配置
+1. 访问 `http://localhost:8000/admin/permissions`
+2. 配置系统管理员
+3. 设置模板可见范围
+4. 查看部门主管列表
 
 ### 打印预览
 
@@ -131,36 +139,46 @@ python run.py
 ```
 dingtalk-h5-app/
 ├── app/
-│   ├── __init__.py           # Flask 应用初始化
-│   ├── config.py             # 配置管理
-│   ├── routes/               # 路由模块
-│   │   ├── admin.py          # 管理后台路由
-│   │   ├── designer.py       # 设计器路由
-│   │   ├── portal.py         # 打印门户路由
-│   │   ├── printing.py       # 打印路由
-│   │   └── users.py          # 用户管理路由
-│   └── services/             # 服务模块
+│   ├── __init__.py              # Flask 应用初始化
+│   ├── config.py                # 配置管理
+│   ├── routes/                  # 路由模块
+│   │   ├── admin.py             # 管理后台路由
+│   │   ├── designer.py          # 设计器路由
+│   │   ├── permissions.py       # 权限管理路由
+│   │   ├── portal.py            # 打印门户路由
+│   │   ├── printing.py          # 打印路由
+│   │   └── users.py             # 用户管理路由
+│   └── services/                # 服务模块
 │       ├── dingtalk_service.py  # 钉钉 API 服务
-│       └── pdf_service.py       # PDF 生成服务
-├── static/                   # 静态资源
-│   ├── css/                  # 样式文件
-│   ├── js/                   # JavaScript 文件
-│   │   └── designer_edit.js  # 设计器核心逻辑
-│   └── outputs/              # PDF 输出目录
-├── templates/                # HTML 模板
-│   ├── designer_edit.html    # 设计器页面
-│   ├── designer_print.html   # 打印预览页面
-│   ├── print.html            # 打印门户页面
-│   └── pdf_templates/        # PDF 模板目录
-├── data/                     # 数据文件
-│   ├── print_layouts.json    # 打印布局配置
-│   ├── process_configs.json  # 流程配置（不提交）
-│   └── users.json            # 用户数据（不提交）
-├── .env.example              # 环境变量示例
-├── .gitignore                # Git 忽略文件
-├── requirements.txt          # Python 依赖
-├── run.py                    # 应用入口
-└── README.md                 # 项目文档
+│       ├── pdf_service.py       # PDF 生成服务
+│       └── permission_service.py # 权限控制服务
+├── static/                      # 静态资源
+│   ├── css/                     # 样式文件
+│   ├── js/                      # JavaScript 文件
+│   │   └── designer_edit.js     # 设计器核心逻辑
+│   └── outputs/                 # PDF 输出目录
+├── templates/                   # HTML 模板
+│   ├── designer_edit.html       # 设计器页面
+│   ├── designer_print.html      # 打印预览页面
+│   ├── print.html               # 打印门户页面
+│   ├── permissions/             # 权限管理页面
+│   │   ├── index.html           # 权限管理主页
+│   │   ├── admins.html          # 系统管理员配置
+│   │   ├── managers.html        # 部门主管查看
+│   │   └── templates.html       # 模板权限配置
+│   └── pdf_templates/           # PDF 模板目录
+├── data/                        # 数据文件
+│   ├── print_layouts.json       # 打印布局配置
+│   ├── business_permissions.json # 业务权限配置
+│   ├── users.json               # 用户数据（不提交）
+│   └── process_configs.json     # 流程配置（不提交）
+├── scripts/                     # 脚本工具
+│   └── upgrade_users_json.py    # 用户数据升级脚本
+├── .env.example                 # 环境变量示例
+├── .gitignore                   # Git 忽略文件
+├── requirements.txt             # Python 依赖
+├── run.py                       # 应用入口
+└── README.md                    # 项目文档
 ```
 
 ## 🔒 安全说明
@@ -181,6 +199,7 @@ dingtalk-h5-app/
 1. 复制 `.env.example` 为 `.env`
 2. 填写钉钉凭证和密钥
 3. 创建必要的数据文件
+4. 运行用户数据升级脚本（如需权限功能）
 
 ## 🛠️ 开发指南
 
@@ -202,6 +221,23 @@ dingtalk-h5-app/
 - 查看服务器终端日志
 
 ## 📝 更新日志
+
+### v1.1.0 (2026-05-05)
+
+**新增功能**:
+- ✅ 权限管理系统
+  - 系统管理员配置
+  - 部门主管自动同步
+  - 模板权限配置
+  - 权限统计展示
+- ✅ 用户数据升级脚本
+- ✅ PC 端优化的管理界面
+
+**优化改进**:
+- ✅ 修复背景闪烁问题
+- ✅ 修复列表滚动抖动
+- ✅ 优化部门选择器
+- ✅ 改进权限判断逻辑
 
 ### v1.0.0 (2026-05-04)
 
@@ -236,6 +272,13 @@ laoqin2024
 ### Q: 如何获取钉钉凭证？
 
 A: 登录钉钉开放平台，创建应用后可获取 APP_KEY 和 APP_SECRET。
+
+### Q: 如何配置权限管理？
+
+A: 
+1. 运行用户数据升级脚本：`python scripts/upgrade_users_json.py`
+2. 访问权限管理页面：`http://localhost:8000/admin/permissions`
+3. 配置系统管理员和模板权限
 
 ### Q: PDF 生成失败怎么办？
 

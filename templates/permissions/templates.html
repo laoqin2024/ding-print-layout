@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>模板权限配置 - 权限管理</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='dist/app.css') }}">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            position: relative;
+            background: #f8fafc;
+        }
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            z-index: -1;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            position: relative;
+            z-index: 1;
+        }
+        .header {
+            background: white;
+            border-radius: 20px;
+            padding: 30px 40px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+        }
+        .panel {
+            background: white;
+            border-radius: 20px;
+            padding: 35px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+        }
+        .panel-title {
+            font-size: 22px;
+            font-weight: 800;
+            color: #1e293b;
+            margin-bottom: 25px;
+        }
+        .templates-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 20px;
+        }
+        .template-card {
+            padding: 25px;
+            background: #f8fafc;
+            border-radius: 16px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 2px solid transparent;
+        }
+        .template-card:hover {
+            background: white;
+            border-color: #667eea;
+            transform: translateY(-5px);
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.2);
+        }
+        .template-icon {
+            font-size: 40px;
+            margin-bottom: 15px;
+        }
+        .template-name {
+            font-size: 16px;
+            font-weight: 800;
+            color: #1e293b;
+            margin-bottom: 8px;
+        }
+        .template-code {
+            font-size: 12px;
+            color: #94a3b8;
+            font-family: monospace;
+        }
+        .modal {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.6);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 50;
+            backdrop-filter: blur(4px);
+        }
+        .modal.active {
+            display: flex;
+        }
+        .modal-content {
+            background: white;
+            border-radius: 24px;
+            padding: 40px;
+            max-width: 700px;
+            width: 90%;
+            max-height: 85vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+        }
+        .modal-title {
+            font-size: 26px;
+            font-weight: 800;
+            color: #1e293b;
+        }
+        .close-btn {
+            font-size: 32px;
+            color: #94a3b8;
+            cursor: pointer;
+            transition: color 0.3s ease;
+            background: none;
+            border: none;
+            padding: 0;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .close-btn:hover {
+            color: #64748b;
+        }
+        .section {
+            margin-bottom: 30px;
+        }
+        .section-title {
+            font-size: 18px;
+            font-weight: 800;
+            color: #1e293b;
+            margin-bottom: 15px;
+        }
+        .radio-option {
+            display: flex;
+            align-items: center;
+            padding: 16px 20px;
+            background: #f8fafc;
+            border-radius: 12px;
+            margin-bottom: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 2px solid transparent;
+        }
+        .radio-option:hover {
+            background: #f1f5f9;
+            border-color: #e2e8f0;
+        }
+        .radio-option input[type="radio"] {
+            margin-right: 12px;
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+        .btn-group {
+            display: flex;
+            gap: 15px;
+            margin-top: 30px;
+        }
+        .btn {
+            flex: 1;
+            padding: 14px 24px;
+            border: none;
+            border-radius: 12px;
+            font-weight: 700;
+            font-size: 15px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+        .btn-secondary {
+            background: #e2e8f0;
+            color: #475569;
+        }
+        .btn-secondary:hover {
+            background: #cbd5e1;
+        }
+        .back-btn {
+            background: white;
+            color: #667eea;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .back-btn:hover {
+            background: #f8f9fa;
+            transform: translateX(-5px);
+        }
+        .loading {
+            text-align: center;
+            padding: 80px 20px;
+            color: #94a3b8;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <h1 style="font-size: 32px; font-weight: 800; color: #1e293b; margin: 0 0 10px 0;">📋 模板权限配置</h1>
+                    <p style="color: #64748b; margin: 0; font-size: 16px;">配置模板的可见范围和查看权限</p>
+                </div>
+                <a href="/admin/permissions" class="back-btn">← 返回</a>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h2 class="panel-title">选择模板</h2>
+            <div id="templates-list" class="templates-grid"></div>
+            <div id="loading" class="loading">
+                <div style="font-size: 48px; margin-bottom: 15px;">⏳</div>
+                <div>加载中...</div>
+            </div>
+        </div>
+
+        <div id="config-modal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 class="modal-title" id="modal-title">配置权限</h3>
+                    <button onclick="closeModal()" class="close-btn">×</button>
+                </div>
+                <div>
+                    <div class="section">
+                        <h4 class="section-title">模板可见性</h4>
+                        <label class="radio-option">
+                            <input type="radio" name="visible_type" value="all" checked>
+                            <span>所有人可见</span>
+                        </label>
+                        <label class="radio-option">
+                            <input type="radio" name="visible_type" value="departments">
+                            <span>指定部门可见</span>
+                        </label>
+                        <div id="dept-selector" style="display: none; margin-top: 15px; padding: 20px; background: #f1f5f9; border-radius: 12px;">
+                            <div style="margin-bottom: 12px; font-weight: 600; color: #475569;">选择可见部门：</div>
+                            <div style="max-height: 300px; overflow-y: auto; padding: 10px; background: white; border-radius: 8px;">
+                                <div id="dept-list"></div>
+                            </div>
+                            <div style="margin-top: 12px; font-size: 13px; color: #64748b;">
+                                已选择 <span id="selected-count" style="font-weight: 700; color: #667eea;">0</span> 个部门
+                            </div>
+                        </div>
+                    </div>
+                    <div class="section">
+                        <h4 class="section-title">额外查看者</h4>
+                        <label class="radio-option">
+                            <input type="radio" name="viewer_type" value="none" checked>
+                            <span>无（仅提交人和部门主管）</span>
+                        </label>
+                        <label class="radio-option">
+                            <input type="radio" name="viewer_type" value="dept_managers">
+                            <span>所有部门主管可查看</span>
+                        </label>
+                    </div>
+                    <div class="btn-group">
+                        <button onclick="saveConfig()" class="btn btn-primary">保存配置</button>
+                        <button onclick="closeModal()" class="btn btn-secondary">取消</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentPCode = null;
+        let allDepartments = [];
+        let selectedDeptIds = [];
+        
+        // 加载部门列表
+        async function loadDepartments() {
+            try {
+                const resp = await fetch('/admin/permissions/api/departments/list');
+                const data = await resp.json();
+                if (data.errcode === 0) {
+                    allDepartments = data.data;
+                }
+            } catch (err) {
+                console.error('加载部门列表失败:', err);
+            }
+        }
+        
+        // 显示部门选择器
+        function showDeptSelector() {
+            const container = document.getElementById('dept-list');
+            container.innerHTML = allDepartments.map(dept => `
+                <label style="display: flex; align-items: center; padding: 10px; cursor: pointer; border-radius: 8px; transition: background 0.2s;">
+                    <input type="checkbox" 
+                           value="${dept.dept_id}" 
+                           onchange="updateSelectedDepts()"
+                           ${selectedDeptIds.includes(dept.dept_id) ? 'checked' : ''}
+                           style="margin-right: 10px; width: 16px; height: 16px; cursor: pointer;">
+                    <span style="flex: 1; color: #1e293b; font-size: 14px;">${dept.name}</span>
+                    <span style="font-size: 12px; color: #94a3b8;">${dept.member_count || 0} 人</span>
+                </label>
+            `).join('');
+            updateSelectedCount();
+        }
+        
+        // 更新选中的部门
+        function updateSelectedDepts() {
+            const checkboxes = document.querySelectorAll('#dept-list input[type="checkbox"]:checked');
+            selectedDeptIds = Array.from(checkboxes).map(cb => cb.value);
+            updateSelectedCount();
+        }
+        
+        // 更新选中数量
+        function updateSelectedCount() {
+            document.getElementById('selected-count').textContent = selectedDeptIds.length;
+        }
+        
+        // 监听可见性类型变化
+        document.querySelectorAll('input[name="visible_type"]').forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                const deptSelector = document.getElementById('dept-selector');
+                if (e.target.value === 'departments') {
+                    deptSelector.style.display = 'block';
+                    showDeptSelector();
+                } else {
+                    deptSelector.style.display = 'none';
+                }
+            });
+        });
+        
+        async function loadTemplates() {
+            try {
+                const resp = await fetch('/admin/permissions/api/templates/list');
+                const data = await resp.json();
+                document.getElementById('loading').style.display = 'none';
+                if (data.errcode === 0) {
+                    const container = document.getElementById('templates-list');
+                    if (data.data.length === 0) {
+                        container.innerHTML = '<div class="loading"><div style="font-size: 48px; margin-bottom: 15px;">📋</div><div>暂无模板</div></div>';
+                        return;
+                    }
+                    container.innerHTML = data.data.map(template => `
+                        <div onclick="openConfig('${template.p_code}', '${template.name}')" class="template-card">
+                            <div class="template-icon">${template.orientation === 'p' ? '📄' : '📋'}</div>
+                            <div class="template-name">${template.name}</div>
+                            <div class="template-code">${template.p_code}</div>
+                        </div>
+                    `).join('');
+                }
+            } catch (err) {
+                console.error('加载模板列表失败:', err);
+            }
+        }
+        
+        async function openConfig(pCode, name) {
+            currentPCode = pCode;
+            selectedDeptIds = [];
+            document.getElementById('modal-title').textContent = `配置权限 - ${name}`;
+            
+            try {
+                const resp = await fetch(`/admin/permissions/api/templates/permission/${pCode}`);
+                const data = await resp.json();
+                if (data.errcode === 0 && data.data) {
+                    const config = data.data;
+                    
+                    // 设置可见性
+                    if (config.visible_to) {
+                        const visibleType = config.visible_to.type || 'all';
+                        const radio = document.querySelector(`input[name="visible_type"][value="${visibleType}"]`);
+                        if (radio) {
+                            radio.checked = true;
+                            if (visibleType === 'departments') {
+                                selectedDeptIds = config.visible_to.dept_ids || [];
+                                document.getElementById('dept-selector').style.display = 'block';
+                                showDeptSelector();
+                            }
+                        }
+                    }
+                    
+                    // 设置查看者
+                    if (config.extra_viewers) {
+                        const viewerType = config.extra_viewers.type || 'none';
+                        const radio = document.querySelector(`input[name="viewer_type"][value="${viewerType}"]`);
+                        if (radio) radio.checked = true;
+                    }
+                }
+            } catch (err) {
+                console.error('加载配置失败:', err);
+            }
+            
+            document.getElementById('config-modal').classList.add('active');
+        }
+        
+        function closeModal() {
+            document.getElementById('config-modal').classList.remove('active');
+            document.getElementById('dept-selector').style.display = 'none';
+            currentPCode = null;
+            selectedDeptIds = [];
+        }
+        
+        async function saveConfig() {
+            if (!currentPCode) return;
+            const visibleType = document.querySelector('input[name="visible_type"]:checked').value;
+            const viewerType = document.querySelector('input[name="viewer_type"]:checked').value;
+            
+            // 验证：如果选择了指定部门，必须至少选择一个部门
+            if (visibleType === 'departments' && selectedDeptIds.length === 0) {
+                alert('❌ 请至少选择一个部门');
+                return;
+            }
+            
+            const config = {
+                visible_to: { 
+                    type: visibleType, 
+                    dept_ids: visibleType === 'departments' ? selectedDeptIds : [], 
+                    userids: [] 
+                },
+                extra_viewers: { 
+                    type: viewerType, 
+                    scope: viewerType === 'dept_managers' ? 'all' : null, 
+                    dept_ids: [], 
+                    userids: [] 
+                }
+            };
+            
+            try {
+                const resp = await fetch(`/admin/permissions/api/templates/permission/${currentPCode}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(config)
+                });
+                const data = await resp.json();
+                if (data.errcode === 0) {
+                    alert('✅ 保存成功');
+                    closeModal();
+                } else {
+                    alert('❌ ' + data.errmsg);
+                }
+            } catch (err) {
+                alert('❌ 保存失败: ' + err.message);
+            }
+        }
+        
+        document.getElementById('config-modal').addEventListener('click', (e) => {
+            if (e.target.id === 'config-modal') closeModal();
+        });
+        
+        // 页面加载时执行
+        loadDepartments().then(() => {
+            loadTemplates();
+        });
+    </script>
+</body>
+</html>
