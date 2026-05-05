@@ -99,7 +99,8 @@ def get_templates():
         if layouts_path.exists():
             data = json.loads(layouts_path.read_text(encoding="utf-8"))
             if isinstance(data, dict):
-                designer_layouts = data
+                # 只获取流程配置，排除 pdf_templates
+                designer_layouts = {k: v for k, v in data.items() if k.startswith("PROC-")}
     except Exception:
         pass
     
@@ -181,7 +182,8 @@ def get_template_instances():
         if layouts_path.exists():
             data = json.loads(layouts_path.read_text(encoding="utf-8"))
             if isinstance(data, dict):
-                designer_layouts = data
+                # 只获取流程配置，排除 pdf_templates
+                designer_layouts = {k: v for k, v in data.items() if k.startswith("PROC-")}
     except Exception as e:
         current_app.logger.error(f"加载模板配置失败: {str(e)}")
     
@@ -323,7 +325,8 @@ def search_template_instances():
         if layouts_path.exists():
             data = json.loads(layouts_path.read_text(encoding="utf-8"))
             if isinstance(data, dict):
-                designer_layouts = data
+                # 只获取流程配置，排除 pdf_templates
+                designer_layouts = {k: v for k, v in data.items() if k.startswith("PROC-")}
     except Exception as e:
         current_app.logger.error(f"加载模板配置失败: {str(e)}")
     
@@ -420,7 +423,8 @@ def get_my_list():
         if layouts_path.exists():
             data = json.loads(layouts_path.read_text(encoding="utf-8"))
             if isinstance(data, dict):
-                designer_layouts = data
+                # 只获取流程配置，排除 pdf_templates
+                designer_layouts = {k: v for k, v in data.items() if k.startswith("PROC-")}
     except Exception:
         pass
     
