@@ -2,7 +2,7 @@
 
 ## 概述
 
-打印门户现在支持基于部门和用户的权限控制。您可以在 `print_layouts.json` 中为每个流程配置权限规则。
+打印门户支持基于部门和用户的权限控制。您可以在 `print_layouts.json` 中为每个流程配置权限规则。
 
 ## 配置方式
 
@@ -10,8 +10,8 @@
 
 ```json
 {
-  "PROC-XXXXX": {
-    "name": "流程名称",
+  "PROC-EXAMPLE-1": {
+    "name": "示例表单名称",
     "permissions": {
       "allowed_depts": ["部门A", "部门B"],
       "allowed_users": ["userid1", "userid2"]
@@ -29,7 +29,7 @@
 
 ```json
 {
-  "PROC-XXXXX": {
+  "PROC-EXAMPLE-1": {
     "name": "公开流程",
     "base_pdf": "template.pdf",
     "items": []
@@ -42,10 +42,10 @@
 
 ```json
 {
-  "PROC-XXXXX": {
-    "name": "采购部专用流程",
+  "PROC-EXAMPLE-2": {
+    "name": "特定部门流程",
     "permissions": {
-      "allowed_depts": ["采购部", "物资管理部"]
+      "allowed_depts": ["财务部", "人事部"]
     },
     "base_pdf": "template.pdf",
     "items": []
@@ -58,10 +58,10 @@
 
 ```json
 {
-  "PROC-XXXXX": {
-    "name": "管理层专用流程",
+  "PROC-EXAMPLE-3": {
+    "name": "特定人员流程",
     "permissions": {
-      "allowed_users": ["022621450536936524", "0524373739-2137068346"]
+      "allowed_users": ["user123", "user456"]
     },
     "base_pdf": "template.pdf",
     "items": []
@@ -74,11 +74,11 @@
 
 ```json
 {
-  "PROC-XXXXX": {
+  "PROC-EXAMPLE-4": {
     "name": "严格限制流程",
     "permissions": {
-      "allowed_depts": ["总经办"],
-      "allowed_users": ["022621450536936524"]
+      "allowed_depts": ["管理层"],
+      "allowed_users": ["admin_user"]
     },
     "base_pdf": "template.pdf",
     "items": []
@@ -90,41 +90,20 @@
 
 ```json
 {
-  "PROC-941085FC-98E5-4D84-8144-B81A054C17CB": {
-    "name": "设计图纸变更通知单",
+  "PROC-EXAMPLE-FORM-A": {
+    "name": "部门A内部审批表",
     "permissions": {
-      "allowed_depts": ["品保部", "采购部", "计划部", "物资管理部", "欣兴汇事业部"]
+      "allowed_depts": ["部门A", "管理层"]
     },
-    "base_pdf": "主机厂图号更改通知单-无部门版本.pdf",
+    "base_pdf": "example_template_a.pdf",
     "use_template": false,
     "orientation": "l",
     "items": [...]
   },
-  "PROC-3AD62964-6C87-488F-9C66-0459940568CD": {
-    "name": "主机客户订单打印",
+  "PROC-EXAMPLE-FORM-B": {
+    "name": "跨部门申购单",
     "permissions": {
-      "allowed_depts": ["销售部", "计划部"]
-    },
-    "base_pdf": "",
-    "use_template": false,
-    "orientation": "p",
-    "items": [...]
-  },
-  "PROC-06F848F3-2ADF-4209-B727-052DE489CFB5": {
-    "name": "后勤物资申购单",
-    "permissions": {
-      "allowed_depts": ["行政部", "总经办"]
-    },
-    "base_pdf": "",
-    "use_template": false,
-    "orientation": "p",
-    "items": [...]
-  },
-  "PROC-BD590F4C-385F-460A-B63E-45549E5238E7": {
-    "name": "系统级外网账号开通",
-    "permissions": {
-      "allowed_depts": ["IT部", "总经办"],
-      "allowed_users": ["022621450536936524"]
+      "allowed_depts": ["行政部", "财务部", "管理层"]
     },
     "base_pdf": "",
     "use_template": false,
@@ -139,12 +118,12 @@
 ### 部门名称
 1. 访问 `/admin/users` 人员管理页面
 2. 查看用户列表中的"部门"列
-3. 使用完整的部门名称（如"总经办"、"采购部"）
+3. 使用完整的部门名称（如"财务部"、"人事部"）
 
 ### 用户ID
 1. 访问 `/admin/users` 人员管理页面
 2. 查看用户列表中的"UserID"列
-3. 复制完整的用户ID（如"022621450536936524"）
+3. 复制完整的用户ID（如"zhangsan123"）
 
 ## 权限生效说明
 
