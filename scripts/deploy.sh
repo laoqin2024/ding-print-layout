@@ -30,9 +30,9 @@ fi
 
 # 3. 安装/更新依赖
 echo "📦 正在安装/更新 Python 依赖..."
-source dingvenv/bin/activate
-pip install --upgrade pip
-pip install -r requirements.txt
+# 放弃使用 source，直接使用虚拟环境的绝对路径二进制文件，100% 避免使用了系统级别的 pip
+./dingvenv/bin/python3 -m pip install --upgrade pip
+./dingvenv/bin/python3 -m pip install -r requirements.txt
 
 # 4. 初始化缺失的配置文件（初次部署时起作用）
 echo "⚙️ 检查配置和数据环境..."
