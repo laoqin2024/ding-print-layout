@@ -62,22 +62,17 @@ static/outputs/*.pdf
 templates/pdf_templates/*.pdf
 !templates/pdf_templates/.gitkeep
 
-# 流程配置（可能包含敏感的流程信息）
-data/process_configs.json
-data/process_versions.json
+# ===============================
+# 数据文件 (安全白名单策略)
+# ===============================
+# 忽略 data 目录下所有的真实数据文件（包含所有业务表单、用户、权限等）
+data/*
 
-# 用户数据
-data/users.json
-data/users.json.backup
-
-# 权限配置
-data/business_permissions.json
-
-# 签名绑定数据
-data/signature_bindings.json
-
-# 钉钉缓存
-data/dingtalk_cache.json
+# 仅允许提交必要的示例文档和基础配置结构
+!data/*.md
+!data/*.example.json
+!data/*.template.json
+!data/.gitkeep
 
 # 日志文件
 *.log

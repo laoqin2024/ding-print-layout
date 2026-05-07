@@ -1,0 +1,9 @@
+{
+  "example_process_id": {
+    "name": "示例表单打印模板",
+    "base_pdf": "",
+    "use_template": false,
+    "orientation": "p",
+    "items": []
+  }
+}

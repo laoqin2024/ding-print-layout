@@ -1,7 +1,0 @@
-{
-  "agree": "static/stamps/agree.png",
-  "web:agree": "static/stamps/web/agree.png",
-  "client:agree": "static/stamps/client/agree.png",
-  "client:refuse": "static/stamps/client/refuse.png",
-  "client:revoke": "static/stamps/client/revoke.png"
-}
