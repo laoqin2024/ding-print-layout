@@ -186,42 +186,33 @@
             console.log('[DEBUG] 钉钉打印：启用附件底图，强制 use_template = true');
           }
           
-          const res = await fetch(`/designer/api/preview`, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({
-              process_code: boot.processCode,
-              instance_id: boot.instanceId,
-              base_pdf: layout.base_pdf || '',
-              use_template: useTemplate,
-              orientation: layout.orientation || 'l',
-              cover_source_mode: layout.cover_source_mode || 'base',
-              cover_mode: layout.cover_mode || 'strict',
-              cover_offset_x: layout.cover_offset_x || 0,
-              cover_offset_y: layout.cover_offset_y || 0,
-              attachment_background_config: attachmentBgConfig,  // ← 新增
-              items: layout.items || [],
-            }),
+          // 构建 PDF URL（使用 GET 请求，更可靠）
+          const params = new URLSearchParams({
+            process_code: boot.processCode,
+            instance_id: boot.instanceId,
+            base_pdf: layout.base_pdf || '',
+            use_template: useTemplate ? '1' : '0',
+            orientation: layout.orientation || 'l',
+            cover_source_mode: layout.cover_source_mode || 'base',
+            cover_mode: layout.cover_mode || 'strict',
+            cover_offset_x: layout.cover_offset_x || 0,
+            cover_offset_y: layout.cover_offset_y || 0,
+            attachment_background_config: JSON.stringify(attachmentBgConfig),
+            items: JSON.stringify(layout.items || []),
           });
           
-          if (!res.ok) {
-            const err = await res.json();
-            throw new Error(err.msg || `HTTP ${res.status}`);
-          }
-          
-          const blob = await res.blob();
-          const url = URL.createObjectURL(blob);
+          const pdfUrl = `/designer/api/preview?${params.toString()}`;
           
           // 保存 PDF URL 供打印使用
-          window.currentPdfUrl = url;
+          window.currentPdfUrl = pdfUrl;
           
           // 保存 orientation 用于打印方向
           window.pdfOrientation = layout.orientation || 'l';
           
-          // Render PDF using iframe (更好的打印支持)
+          // 直接使用 PDF URL，不通过 blob（更可靠）
           if (container) {
             container.innerHTML = `
-              <iframe src="${url}" width="100%" height="800px" class="rounded-2xl" style="border: none;"></iframe>
+              <iframe src="${pdfUrl}" width="100%" height="800px" class="rounded-2xl" style="border: none;" onload="console.log('PDF loaded successfully')" onerror="console.error('PDF load failed')"></iframe>
             `;
           }
           
