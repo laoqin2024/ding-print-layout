@@ -2051,62 +2051,86 @@ def designer_preview_print():
     Print preview entry: generates PDF using designer layout and shows print UI.
     This is called from钉钉打印入口 when designer layout exists.
     """
-    process_code = str(request.args.get("process_code") or "").strip()
-    instance_id = str(request.args.get("instance_id") or "").strip()
-    
-    if not process_code or not instance_id:
-        return "缺少 process_code 或 instance_id", 400
-    
-    layouts = _load_layouts()
-    layout = layouts.get(process_code)
-    if not layout:
-        return f"未找到设计器布局: {process_code}", 404
-    
-    # Call designer preview API directly to generate PDF
-    cfg = _cfg()
-    ding = _ding()
-    
-    # Get admin userid from env or use a default
-    userid = os.getenv("DINGTALK_ADMIN_USERID") or ""
-    
-    # Prepare payload for preview API
-    payload = {
-        "process_code": process_code,
-        "instance_id": instance_id,
-        "userid": userid,
-        "base_pdf": layout.get("base_pdf", ""),
-        "use_template": layout.get("use_template", True),
-        "orientation": layout.get("orientation", "l"),
-        "cover_source_mode": layout.get("cover_source_mode", "base"),
-        "cover_mode": layout.get("cover_mode", "strict"),
-        "cover_offset_x": layout.get("cover_offset_x", 0),
-        "cover_offset_y": layout.get("cover_offset_y", 0),
-        "attachment_background_config": layout.get("attachment_background_config", {}),
-        "items": layout.get("items", []),
-    }
-    
-    # 如果启用了附件底图，强制 use_template = True
-    attachment_bg_config = payload.get("attachment_background_config") or {}
-    if attachment_bg_config.get("enabled") and payload.get("cover_source_mode") == "attachment":
-        payload["use_template"] = True
-        print(f"[DEBUG] 钉钉打印：启用附件底图，强制 use_template = True")
-    
-    print(f"[DEBUG] designer_preview_print payload:")
-    print(f"  - use_template: {payload['use_template']}")
-    print(f"  - cover_source_mode: {payload['cover_source_mode']}")
-    print(f"  - attachment_bg_config: {payload['attachment_background_config']}")
-    
-    # Generate PDF using the same logic as designer_preview
-    # For now, redirect to a simpler approach: use the existing preview endpoint
-    # But we need to render it properly for print view
-    
-    return render_template(
-        "designer_print.html",
-        process_code=process_code,
-        instance_id=instance_id,
-        layout_name=layout.get("name") or process_code,
-        layout_json=json.dumps(layout),
-    )
+    try:
+        process_code = str(request.args.get("process_code") or "").strip()
+        instance_id = str(request.args.get("instance_id") or "").strip()
+        
+        print(f"[DEBUG] designer_preview_print called:")
+        print(f"  - process_code: {process_code}")
+        print(f"  - instance_id: {instance_id}")
+        print(f"  - request.url: {request.url}")
+        
+        if not process_code or not instance_id:
+            print(f"[ERROR] 缺少参数: process_code={process_code}, instance_id={instance_id}")
+            return "缺少 process_code 或 instance_id", 400
+        
+        layouts = _load_layouts()
+        print(f"[DEBUG] 加载的布局数量: {len(layouts)}")
+        print(f"[DEBUG] 布局键: {list(layouts.keys())}")
+        
+        layout = layouts.get(process_code)
+        if not layout:
+            print(f"[ERROR] 未找到设计器布局: {process_code}")
+            return f"未找到设计器布局: {process_code}", 404
+        
+        print(f"[DEBUG] 找到布局: {layout.get('name')}")
+        
+        # Call designer preview API directly to generate PDF
+        cfg = _cfg()
+        ding = _ding()
+        
+        # Get admin userid from env or use a default
+        userid = os.getenv("DINGTALK_ADMIN_USERID") or ""
+        
+        # Prepare payload for preview API
+        payload = {
+            "process_code": process_code,
+            "instance_id": instance_id,
+            "userid": userid,
+            "base_pdf": layout.get("base_pdf", ""),
+            "use_template": layout.get("use_template", True),
+            "orientation": layout.get("orientation", "l"),
+            "cover_source_mode": layout.get("cover_source_mode", "base"),
+            "cover_mode": layout.get("cover_mode", "strict"),
+            "cover_offset_x": layout.get("cover_offset_x", 0),
+            "cover_offset_y": layout.get("cover_offset_y", 0),
+            "attachment_background_config": layout.get("attachment_background_config", {}),
+            "items": layout.get("items", []),
+        }
+        
+        # 如果启用了附件底图，强制 use_template = True
+        attachment_bg_config = payload.get("attachment_background_config") or {}
+        if attachment_bg_config.get("enabled") and payload.get("cover_source_mode") == "attachment":
+            payload["use_template"] = True
+            print(f"[DEBUG] 钉钉打印：启用附件底图，强制 use_template = True")
+        
+        print(f"[DEBUG] designer_preview_print payload:")
+        print(f"  - use_template: {payload['use_template']}")
+        print(f"  - cover_source_mode: {payload['cover_source_mode']}")
+        print(f"  - attachment_bg_config: {payload['attachment_background_config']}")
+        
+        # Generate PDF using the same logic as designer_preview
+        # For now, redirect to a simpler approach: use the existing preview endpoint
+        # But we need to render it properly for print view
+        
+        print(f"[DEBUG] 准备渲染模板 designer_print.html")
+        
+        result = render_template(
+            "designer_print.html",
+            process_code=process_code,
+            instance_id=instance_id,
+            layout_name=layout.get("name") or process_code,
+            layout_json=json.dumps(layout),
+        )
+        
+        print(f"[DEBUG] 模板渲染成功，长度: {len(result)} bytes")
+        return result
+        
+    except Exception as e:
+        print(f"[ERROR] designer_preview_print 异常: {type(e).__name__}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return f"打印预览失败: {str(e)}", 500
 
 
 @designer_bp.route("/designer/api/render_attachment_bg")
