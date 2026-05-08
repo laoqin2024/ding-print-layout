@@ -186,47 +186,76 @@
             console.log('[DEBUG] 钉钉打印：启用附件底图，强制 use_template = true');
           }
           
-          // 构建 PDF URL（使用 GET 请求，更可靠）
-          const params = new URLSearchParams({
-            process_code: boot.processCode,
-            instance_id: boot.instanceId,
-            base_pdf: layout.base_pdf || '',
-            use_template: useTemplate ? '1' : '0',
-            orientation: layout.orientation || 'l',
-            cover_source_mode: layout.cover_source_mode || 'base',
-            cover_mode: layout.cover_mode || 'strict',
-            cover_offset_x: layout.cover_offset_x || 0,
-            cover_offset_y: layout.cover_offset_y || 0,
-            attachment_background_config: JSON.stringify(attachmentBgConfig),
-            items: JSON.stringify(layout.items || []),
+          // 使用 POST 请求（更可靠，避免 URL 长度限制）
+          console.log('[DEBUG] 开始生成 PDF...');
+          const res = await fetch(`/designer/api/preview`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              process_code: boot.processCode,
+              instance_id: boot.instanceId,
+              base_pdf: layout.base_pdf || '',
+              use_template: useTemplate,
+              orientation: layout.orientation || 'l',
+              cover_source_mode: layout.cover_source_mode || 'base',
+              cover_mode: layout.cover_mode || 'strict',
+              cover_offset_x: layout.cover_offset_x || 0,
+              cover_offset_y: layout.cover_offset_y || 0,
+              attachment_background_config: attachmentBgConfig,
+              items: layout.items || [],
+            }),
           });
           
-          const pdfUrl = `/designer/api/preview?${params.toString()}`;
+          console.log('[DEBUG] PDF 请求响应:', res.status, res.statusText);
+          
+          if (!res.ok) {
+            let errMsg = `HTTP ${res.status}`;
+            try {
+              const err = await res.json();
+              errMsg = err.msg || errMsg;
+            } catch (e) {
+              const text = await res.text();
+              errMsg = text.substring(0, 200) || errMsg;
+            }
+            throw new Error(errMsg);
+          }
+          
+          const blob = await res.blob();
+          console.log('[DEBUG] PDF blob 大小:', blob.size, 'bytes, 类型:', blob.type);
+          
+          if (blob.size === 0) {
+            throw new Error('PDF 内容为空');
+          }
+          
+          const url = URL.createObjectURL(blob);
+          console.log('[DEBUG] PDF blob URL 创建成功');
           
           // 保存 PDF URL 供打印使用
-          window.currentPdfUrl = pdfUrl;
+          window.currentPdfUrl = url;
           
           // 保存 orientation 用于打印方向
           window.pdfOrientation = layout.orientation || 'l';
           
-          // 直接使用 PDF URL，不通过 blob（更可靠）
+          // 使用 embed 标签（更好的 PDF 支持）
           if (container) {
             container.innerHTML = `
-              <iframe src="${pdfUrl}" width="100%" height="800px" class="rounded-2xl" style="border: none;" onload="console.log('PDF loaded successfully')" onerror="console.error('PDF load failed')"></iframe>
+              <embed src="${url}" type="application/pdf" width="100%" height="800px" class="rounded-2xl" style="border: none;" />
             `;
+            console.log('[DEBUG] PDF embed 已插入');
           }
           
           if (pageLabel) {
             pageLabel.textContent = 'PDF 已生成';
           }
         } catch (err) {
-          console.error('PDF generation failed:', err);
+          console.error('[ERROR] PDF generation failed:', err);
           if (container) {
             container.innerHTML = `
               <div class="text-center py-14">
                 <div class="glass rounded-3xl px-6 py-10 inline-block">
                   <div class="text-base font-black text-red-600 dark:text-red-400">PDF 生成失败</div>
                   <div class="text-[11px] text-slate-500 dark:text-slate-400 mt-2">${err.message || '未知错误'}</div>
+                  <button onclick="location.reload()" class="mt-4 glass rounded-2xl px-4 py-2 text-xs font-black">重试</button>
                 </div>
               </div>
             `;
